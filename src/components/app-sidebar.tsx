@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Target, Users, LayoutDashboard, Gauge, LogOut } from "lucide-react";
+import { Target, Users, LayoutDashboard, Gauge, LogOut, Kanban } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 const items = [
   { title: "Modo Foco", url: "/cockpit", icon: Gauge },
+  { title: "CRM SDR", url: "/sdr", icon: Kanban },
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Números de Ouro", url: "/goals", icon: Target },
   { title: "Diário de Bordo", url: "/diario", icon: LayoutDashboard },
