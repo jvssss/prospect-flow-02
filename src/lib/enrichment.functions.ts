@@ -164,13 +164,47 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
     let created = 0;
     if (rows.length) {
       const { data: inserted, error: iErr } = await supabase
-        .from("leads").insert(rows).select("id");
+        .from("leads").insert(rows).select("id, cnpj");
       if (iErr && !String(iErr.message).includes("duplicate")) throw iErr;
       created = inserted?.length ?? rows.length;
+
+      // Auto-enrich CNPJ (QSA / capital social) via publica.cnpj.ws
+      const withCnpj = (inserted ?? []).filter((r: any) => r.cnpj);
+      for (const r of withCnpj) {
+        try {
+          const payload = await fetchCnpjData(r.cnpj as string);
+          const mapped = mapCnpjPayload(payload);
+          const socios = Array.isArray(mapped.qsa) ? mapped.qsa : null;
+          const proprietario = socios?.[0]?.nome ?? socios?.[0]?.nome_socio ?? null;
+          await supabase.from("leads").update({ ...mapped, socios, proprietario }).eq("id", r.id);
+        } catch { /* rate-limit tolerant */ }
+      }
     }
 
     await supabase.from("enrichment_jobs")
       .update({ status: "done", progress: 100, leads_created: created }).eq("id", job.id);
 
     return { ...job, status: "done", leads_created: created };
+  });
+
+// Enriquecer em lote leads com CNPJ e sem QSA salvo
+export const enrichMissingSocios = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data: leads } = await supabase
+      .from("leads").select("id, cnpj").eq("user_id", userId)
+      .not("cnpj", "is", null).is("socios", null).limit(30);
+    let ok = 0;
+    for (const l of leads ?? []) {
+      try {
+        const payload = await fetchCnpjData(l.cnpj as string);
+        const mapped = mapCnpjPayload(payload);
+        const socios = Array.isArray(mapped.qsa) ? mapped.qsa : null;
+        const proprietario = socios?.[0]?.nome ?? null;
+        await supabase.from("leads").update({ ...mapped, socios, proprietario }).eq("id", l.id);
+        ok++;
+      } catch { /* continue */ }
+    }
+    return { processed: leads?.length ?? 0, ok };
   });
