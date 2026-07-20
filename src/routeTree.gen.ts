@@ -17,6 +17,7 @@ import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
 import { Route as AuthenticatedDiarioRouteImport } from './routes/_authenticated/diario'
 import { Route as AuthenticatedCockpitRouteImport } from './routes/_authenticated/cockpit'
+import { Route as AuthenticatedQualifyLeadIdRouteImport } from './routes/_authenticated/qualify.$leadId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -57,6 +58,12 @@ const AuthenticatedCockpitRoute = AuthenticatedCockpitRouteImport.update({
   path: '/cockpit',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedQualifyLeadIdRoute =
+  AuthenticatedQualifyLeadIdRouteImport.update({
+    id: '/qualify/$leadId',
+    path: '/qualify/$leadId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/sdr': typeof AuthenticatedSdrRoute
+  '/qualify/$leadId': typeof AuthenticatedQualifyLeadIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -75,6 +83,7 @@ export interface FileRoutesByTo {
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/sdr': typeof AuthenticatedSdrRoute
+  '/qualify/$leadId': typeof AuthenticatedQualifyLeadIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,6 +95,7 @@ export interface FileRoutesById {
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/sdr': typeof AuthenticatedSdrRoute
+  '/_authenticated/qualify/$leadId': typeof AuthenticatedQualifyLeadIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -97,8 +107,17 @@ export interface FileRouteTypes {
     | '/goals'
     | '/leads'
     | '/sdr'
+    | '/qualify/$leadId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/cockpit' | '/diario' | '/goals' | '/leads' | '/sdr'
+  to:
+    | '/'
+    | '/auth'
+    | '/cockpit'
+    | '/diario'
+    | '/goals'
+    | '/leads'
+    | '/sdr'
+    | '/qualify/$leadId'
   id:
     | '__root__'
     | '/'
@@ -109,6 +128,7 @@ export interface FileRouteTypes {
     | '/_authenticated/goals'
     | '/_authenticated/leads'
     | '/_authenticated/sdr'
+    | '/_authenticated/qualify/$leadId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -175,6 +195,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCockpitRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/qualify/$leadId': {
+      id: '/_authenticated/qualify/$leadId'
+      path: '/qualify/$leadId'
+      fullPath: '/qualify/$leadId'
+      preLoaderRoute: typeof AuthenticatedQualifyLeadIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -184,6 +211,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedGoalsRoute: typeof AuthenticatedGoalsRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedSdrRoute: typeof AuthenticatedSdrRoute
+  AuthenticatedQualifyLeadIdRoute: typeof AuthenticatedQualifyLeadIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -192,6 +220,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedGoalsRoute: AuthenticatedGoalsRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedSdrRoute: AuthenticatedSdrRoute,
+  AuthenticatedQualifyLeadIdRoute: AuthenticatedQualifyLeadIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
