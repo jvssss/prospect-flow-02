@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,8 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Search, Plus, Trash2 } from "lucide-react";
+import { Upload, Search, Plus, Trash2, Sparkles, Wand2, Loader2 } from "lucide-react";
 import { formatBRL, formatPhoneBR, onlyDigits } from "@/lib/goldenMath";
+import { enrichLeadCnpj, startEnrichmentJob, syncEnrichmentJob } from "@/lib/enrichment.functions";
 
 export const Route = createFileRoute("/_authenticated/leads")({
   head: () => ({
@@ -90,6 +92,7 @@ function LeadsPage() {
           <p className="mt-1 text-muted-foreground">{leads.length} leads · fila do Modo Foco</p>
         </div>
         <div className="flex gap-2">
+          <ApifyEnrichDialog onQueued={() => qc.invalidateQueries({ queryKey: ["leads"] })} />
           <Button variant="outline" className="rounded-2xl" onClick={() => fileRef.current?.click()}>
             <Upload className="mr-2 h-4 w-4" /> Importar CSV
           </Button>
@@ -132,12 +135,14 @@ function LeadsPage() {
                     <TableCell>
                       <div className="font-medium">{l.nome_fantasia ?? l.razao_social ?? "—"}</div>
                       {l.razao_social && l.nome_fantasia && <div className="text-xs text-muted-foreground">{l.razao_social}</div>}
+                      {l.cnpj && <div className="text-xs text-muted-foreground tabular-nums">CNPJ {l.cnpj}</div>}
                     </TableCell>
                     <TableCell className="tabular-nums">{formatPhoneBR(l.telefone_1) || "—"}</TableCell>
                     <TableCell>{l.bairro ?? "—"}</TableCell>
                     <TableCell className="tabular-nums">{l.capital_social ? formatBRL(Number(l.capital_social)) : "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="rounded-full">{l.status}</Badge></TableCell>
                     <TableCell className="text-right">
+                      <EnrichCnpjButton lead={l} />
                       <Button size="icon" variant="ghost" className="rounded-xl" onClick={() => del.mutate(l.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -153,6 +158,116 @@ function LeadsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function EnrichCnpjButton({ lead }: { lead: any }) {
+  const qc = useQueryClient();
+  const enrich = useServerFn(enrichLeadCnpj);
+  const [loading, setLoading] = useState(false);
+  if (!lead.cnpj) return null;
+  async function run() {
+    setLoading(true);
+    try {
+      await enrich({ data: { leadId: lead.id } });
+      toast.success("CNPJ enriquecido");
+      qc.invalidateQueries({ queryKey: ["leads"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao enriquecer");
+    } finally { setLoading(false); }
+  }
+  return (
+    <Button size="icon" variant="ghost" className="rounded-xl" title="Enriquecer CNPJ" onClick={run} disabled={loading}>
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary" />}
+    </Button>
+  );
+}
+
+function ApifyEnrichDialog({ onQueued }: { onQueued: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [city, setCity] = useState("");
+  const [niche, setNiche] = useState("Autoescola");
+  const [maxResults, setMaxResults] = useState(40);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("");
+  const [progress, setProgress] = useState(0);
+  const [created, setCreated] = useState<number | null>(null);
+  const start = useServerFn(startEnrichmentJob);
+  const sync = useServerFn(syncEnrichmentJob);
+
+  async function submit() {
+    if (!city.trim()) return toast.error("Informe a cidade");
+    try {
+      const res = await start({ data: { city, niche, maxResults } });
+      setJobId(res.jobId); setStatus("running"); setProgress(10); setCreated(null);
+      toast.success("Busca iniciada no Google Maps");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao iniciar");
+    }
+  }
+
+  useEffect(() => {
+    if (!jobId || status === "done" || status === "failed") return;
+    const t = setInterval(async () => {
+      try {
+        const j: any = await sync({ data: { jobId } });
+        setStatus(j.status); setProgress(j.progress ?? 0);
+        if (j.status === "done") {
+          setCreated(j.leads_created ?? 0);
+          toast.success(`${j.leads_created ?? 0} leads adicionados`);
+          onQueued();
+        } else if (j.status === "failed") {
+          toast.error(j.error ?? "Falha na busca");
+        }
+      } catch (e: any) {
+        toast.error(e?.message ?? "Erro ao sincronizar");
+        setStatus("failed");
+      }
+    }, 4000);
+    return () => clearInterval(t);
+  }, [jobId, status, sync, onQueued]);
+
+  const running = jobId && status !== "done" && status !== "failed";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setJobId(null); setStatus(""); setProgress(0); setCreated(null); } }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="rounded-2xl"><Wand2 className="mr-2 h-4 w-4" /> Buscar no Google Maps</Button>
+      </DialogTrigger>
+      <DialogContent className="rounded-3xl">
+        <DialogHeader><DialogTitle>Enriquecimento por nicho + cidade</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Nicho</Label><Input className="rounded-xl" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Autoescola" /></div>
+            <div><Label>Cidade</Label><Input className="rounded-xl" value={city} onChange={(e) => setCity(e.target.value)} placeholder="São Paulo" /></div>
+          </div>
+          <div>
+            <Label>Máx. de resultados</Label>
+            <Input type="number" min={5} max={200} className="rounded-xl" value={maxResults} onChange={(e) => setMaxResults(Number(e.target.value) || 40)} />
+          </div>
+
+          {jobId && (
+            <div className="rounded-2xl border bg-muted/40 p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">
+                  {status === "done" ? "Concluído" : status === "failed" ? "Falhou" : "Buscando no Google Maps..."}
+                </span>
+                <span className="tabular-nums text-muted-foreground">{progress}%</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-background">
+                <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              {created !== null && <div className="mt-2 text-muted-foreground">{created} leads adicionados à sua base.</div>}
+              <p className="mt-2 text-xs text-muted-foreground">Você pode fechar esta janela — o processamento continua no servidor.</p>
+            </div>
+          )}
+
+          <Button onClick={submit} disabled={!!running} className="w-full rounded-2xl">
+            {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando…</> : "Iniciar busca"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
