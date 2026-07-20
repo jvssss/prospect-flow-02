@@ -47,10 +47,12 @@ export const enrichLeadCnpj = createServerFn({ method: "POST" })
 
     const payload = await fetchCnpjData(lead.cnpj);
     const mapped = mapCnpjPayload(payload);
-
-    const { error: upErr } = await supabase.from("leads").update(mapped).eq("id", lead.id);
+    const socios = Array.isArray(mapped.qsa) ? mapped.qsa : null;
+    const proprietario = socios?.[0]?.nome ?? socios?.[0]?.nome_socio ?? null;
+    const { error: upErr } = await supabase.from("leads")
+      .update({ ...mapped, socios, proprietario }).eq("id", lead.id);
     if (upErr) throw upErr;
-    return { ok: true, mapped };
+    return { ok: true, mapped, socios, proprietario };
   });
 
 // ---------- Apify Google Maps scraping ----------
