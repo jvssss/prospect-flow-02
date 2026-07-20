@@ -113,14 +113,13 @@ function Cockpit() {
     const durationSeconds = Math.max(1, Math.floor((Date.now() - startedAt.current) / 1000));
 
     const meta = OUTCOMES.find((x) => x.key === o)!;
-    const updates: Record<string, unknown> = {
+    const { error: uErr } = await supabase.from("leads").update({
       status: meta.status,
       last_call_at: new Date().toISOString(),
-    };
-    if (o === "gatekeeper" && nomePonte) updates.nome_ponte = nomePonte;
-    if ((o === "callback" || o === "meeting_scheduled") && returnAt) updates.retorno_agendado_em = new Date(returnAt).toISOString();
-
-    const { error: uErr } = await supabase.from("leads").update(updates).eq("id", lead.id);
+      nome_ponte: o === "gatekeeper" && nomePonte ? nomePonte : undefined,
+      retorno_agendado_em: (o === "callback" || o === "meeting_scheduled") && returnAt
+        ? new Date(returnAt).toISOString() : undefined,
+    }).eq("id", lead.id);
     if (uErr) return toast.error(uErr.message);
 
     const { error: cErr } = await supabase.from("call_logs").insert({
