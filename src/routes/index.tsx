@@ -1,24 +1,86 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { Target, Gauge, Users, LayoutDashboard, ArrowRight } from "lucide-react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) navigate({ to: "/cockpit", replace: true });
+      else setChecking(false);
+    });
+  }, [navigate]);
+
+  if (checking) {
+    return <div className="min-h-screen bg-background" />;
+  }
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="min-h-screen bg-background">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+        <div className="flex items-center gap-2 font-semibold">
+          <div className="grid h-9 w-9 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-elegant)]">
+            <Target className="h-4 w-4" />
+          </div>
+          <span className="text-lg tracking-tight">Meta Prospect</span>
+        </div>
+        <Button asChild variant="outline" className="rounded-2xl">
+          <Link to="/auth">Entrar</Link>
+        </Button>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-6 pb-24 pt-10 md:pt-20">
+        <section className="mx-auto max-w-3xl text-center">
+          <span className="inline-flex items-center rounded-full border border-border bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+            Matemática do Faturamento · Marcus Vinícius
+          </span>
+          <h1 className="mt-6 text-4xl font-bold tracking-tight text-foreground md:text-6xl">
+            Bata sua meta com <span className="text-primary">clareza matemática</span>.
+          </h1>
+          <p className="mt-6 text-lg leading-relaxed text-muted-foreground md:text-xl">
+            Um cockpit ultra-ágil para SDR/BDR: 60 a 65 ligações em 1h30, hotkeys,
+            timer inteligente e Números de Ouro que traduzem sua meta mensal em ações
+            do dia.
+          </p>
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            <Button asChild size="lg" className="rounded-2xl bg-primary shadow-[var(--shadow-elegant)]">
+              <Link to="/auth">
+                Começar agora <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </section>
+
+        <section className="mt-24 grid gap-6 md:grid-cols-3">
+          {[
+            { icon: Target, title: "Números de Ouro", body: "Meta mensal + funil viram ligações/dia com um cálculo automático." },
+            { icon: Gauge, title: "Modo Foco", body: "Um lead por vez, timer regressivo, hotkeys 1-5 e ritmo gamificado." },
+            { icon: LayoutDashboard, title: "Diário de Bordo", body: "Conversão real vs. estimada e sugestão de recalibração." },
+          ].map((f) => (
+            <div key={f.title} className="rounded-3xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-accent text-primary">
+                <f.icon className="h-5 w-5" />
+              </div>
+              <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="mt-24 flex items-center gap-3 text-sm text-muted-foreground">
+          <Users className="h-4 w-4 text-primary" />
+          Feito para times de SDR/BDR que precisam bater meta hoje, não semana que vem.
+        </section>
+      </main>
     </div>
   );
 }
