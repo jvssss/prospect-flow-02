@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
+import { Route as AuthenticatedDiarioRouteImport } from './routes/_authenticated/diario'
 import { Route as AuthenticatedCockpitRouteImport } from './routes/_authenticated/cockpit'
 
 const AuthRoute = AuthRouteImport.update({
@@ -29,9 +31,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedGoalsRoute = AuthenticatedGoalsRouteImport.update({
   id: '/goals',
   path: '/goals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDiarioRoute = AuthenticatedDiarioRouteImport.update({
+  id: '/diario',
+  path: '/diario',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCockpitRoute = AuthenticatedCockpitRouteImport.update({
@@ -44,13 +56,17 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/cockpit': typeof AuthenticatedCockpitRoute
+  '/diario': typeof AuthenticatedDiarioRoute
   '/goals': typeof AuthenticatedGoalsRoute
+  '/leads': typeof AuthenticatedLeadsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/cockpit': typeof AuthenticatedCockpitRoute
+  '/diario': typeof AuthenticatedDiarioRoute
   '/goals': typeof AuthenticatedGoalsRoute
+  '/leads': typeof AuthenticatedLeadsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -58,20 +74,24 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/cockpit': typeof AuthenticatedCockpitRoute
+  '/_authenticated/diario': typeof AuthenticatedDiarioRoute
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
+  '/_authenticated/leads': typeof AuthenticatedLeadsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/cockpit' | '/goals'
+  fullPaths: '/' | '/auth' | '/cockpit' | '/diario' | '/goals' | '/leads'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/cockpit' | '/goals'
+  to: '/' | '/auth' | '/cockpit' | '/diario' | '/goals' | '/leads'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/cockpit'
+    | '/_authenticated/diario'
     | '/_authenticated/goals'
+    | '/_authenticated/leads'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -103,11 +123,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/leads': {
+      id: '/_authenticated/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/goals': {
       id: '/_authenticated/goals'
       path: '/goals'
       fullPath: '/goals'
       preLoaderRoute: typeof AuthenticatedGoalsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/diario': {
+      id: '/_authenticated/diario'
+      path: '/diario'
+      fullPath: '/diario'
+      preLoaderRoute: typeof AuthenticatedDiarioRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/cockpit': {
@@ -122,12 +156,16 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCockpitRoute: typeof AuthenticatedCockpitRoute
+  AuthenticatedDiarioRoute: typeof AuthenticatedDiarioRoute
   AuthenticatedGoalsRoute: typeof AuthenticatedGoalsRoute
+  AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCockpitRoute: AuthenticatedCockpitRoute,
+  AuthenticatedDiarioRoute: AuthenticatedDiarioRoute,
   AuthenticatedGoalsRoute: AuthenticatedGoalsRoute,
+  AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
