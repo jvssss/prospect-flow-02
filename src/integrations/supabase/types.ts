@@ -195,6 +195,8 @@ export type Database = {
           bairro: string | null
           capital_social: number | null
           cidade: string | null
+          closer_notes: string | null
+          closer_summary: Json | null
           cnpj: string | null
           created_at: string
           data_abertura: string | null
@@ -205,12 +207,21 @@ export type Database = {
           google_reviews: number | null
           id: string
           last_call_at: string | null
+          meeting_at: string | null
+          meeting_link: string | null
+          meeting_result: string | null
+          meeting_status: string | null
           nome_fantasia: string | null
           nome_ponte: string | null
           notas: string | null
+          pipeline_stage: string
+          proprietario: string | null
           qsa: Json | null
+          qualified_at: string | null
           razao_social: string | null
           retorno_agendado_em: string | null
+          sdr_qualification: Json | null
+          socios: Json | null
           source: string
           status: string
           telefone_1: string | null
@@ -225,6 +236,8 @@ export type Database = {
           bairro?: string | null
           capital_social?: number | null
           cidade?: string | null
+          closer_notes?: string | null
+          closer_summary?: Json | null
           cnpj?: string | null
           created_at?: string
           data_abertura?: string | null
@@ -235,12 +248,21 @@ export type Database = {
           google_reviews?: number | null
           id?: string
           last_call_at?: string | null
+          meeting_at?: string | null
+          meeting_link?: string | null
+          meeting_result?: string | null
+          meeting_status?: string | null
           nome_fantasia?: string | null
           nome_ponte?: string | null
           notas?: string | null
+          pipeline_stage?: string
+          proprietario?: string | null
           qsa?: Json | null
+          qualified_at?: string | null
           razao_social?: string | null
           retorno_agendado_em?: string | null
+          sdr_qualification?: Json | null
+          socios?: Json | null
           source?: string
           status?: string
           telefone_1?: string | null
@@ -255,6 +277,8 @@ export type Database = {
           bairro?: string | null
           capital_social?: number | null
           cidade?: string | null
+          closer_notes?: string | null
+          closer_summary?: Json | null
           cnpj?: string | null
           created_at?: string
           data_abertura?: string | null
@@ -265,12 +289,21 @@ export type Database = {
           google_reviews?: number | null
           id?: string
           last_call_at?: string | null
+          meeting_at?: string | null
+          meeting_link?: string | null
+          meeting_result?: string | null
+          meeting_status?: string | null
           nome_fantasia?: string | null
           nome_ponte?: string | null
           notas?: string | null
+          pipeline_stage?: string
+          proprietario?: string | null
           qsa?: Json | null
+          qualified_at?: string | null
           razao_social?: string | null
           retorno_agendado_em?: string | null
+          sdr_qualification?: Json | null
+          socios?: Json | null
           source?: string
           status?: string
           telefone_1?: string | null
