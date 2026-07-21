@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, Search, Plus, Trash2, Sparkles, Wand2, Loader2 } from "lucide-react";
 import { formatBRL, formatPhoneBR, onlyDigits } from "@/lib/goldenMath";
-import { enrichLeadCnpj, startEnrichmentJob, syncEnrichmentJob } from "@/lib/enrichment.functions";
+import { enrichLeadCnpj, enrichMissingSocios, startEnrichmentJob, syncEnrichmentJob } from "@/lib/enrichment.functions";
 
 export const Route = createFileRoute("/_authenticated/leads")({
   head: () => ({
@@ -93,6 +93,7 @@ function LeadsPage() {
         </div>
         <div className="flex gap-2">
           <ApifyEnrichDialog onQueued={() => qc.invalidateQueries({ queryKey: ["leads"] })} />
+          <BackfillSociosButton onDone={() => qc.invalidateQueries({ queryKey: ["leads"] })} />
           <Button variant="outline" className="rounded-2xl" onClick={() => fileRef.current?.click()}>
             <Upload className="mr-2 h-4 w-4" /> Importar CSV
           </Button>
@@ -162,6 +163,31 @@ function LeadsPage() {
 }
 
 function EnrichCnpjButton({ lead }: { lead: any }) {
+  return <_EnrichCnpjButtonImpl lead={lead} />;
+}
+
+function BackfillSociosButton({ onDone }: { onDone: () => void }) {
+  const run = useServerFn(enrichMissingSocios);
+  const [loading, setLoading] = useState(false);
+  async function go() {
+    setLoading(true);
+    try {
+      const r: any = await run();
+      toast.success(`Sócios: ${r?.ok ?? 0} atualizados · ${r?.matched ?? 0} novos CNPJs encontrados`);
+      onDone();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao buscar sócios");
+    } finally { setLoading(false); }
+  }
+  return (
+    <Button variant="outline" className="rounded-2xl" onClick={go} disabled={loading}>
+      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+      Buscar sócios
+    </Button>
+  );
+}
+
+function _EnrichCnpjButtonImpl({ lead }: { lead: any }) {
   const qc = useQueryClient();
   const enrich = useServerFn(enrichLeadCnpj);
   const [loading, setLoading] = useState(false);

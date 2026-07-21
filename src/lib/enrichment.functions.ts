@@ -10,6 +10,24 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const CNPJ_BIZ_BASE = "https://cnpj.biz/api/v2";
 
+const UF_MAP: Record<string, string> = {
+  acre: "AC", alagoas: "AL", amapa: "AP", "amapá": "AP", amazonas: "AM",
+  bahia: "BA", ceara: "CE", "ceará": "CE", "distrito federal": "DF",
+  "espirito santo": "ES", "espírito santo": "ES", goias: "GO", "goiás": "GO",
+  maranhao: "MA", "maranhão": "MA", "mato grosso": "MT", "mato grosso do sul": "MS",
+  "minas gerais": "MG", para: "PA", "pará": "PA", paraiba: "PB", "paraíba": "PB",
+  parana: "PR", "paraná": "PR", pernambuco: "PE", piaui: "PI", "piauí": "PI",
+  "rio de janeiro": "RJ", "rio grande do norte": "RN", "rio grande do sul": "RS",
+  rondonia: "RO", "rondônia": "RO", roraima: "RR", "santa catarina": "SC",
+  "sao paulo": "SP", "são paulo": "SP", sergipe: "SE", tocantins: "TO",
+};
+function normalizeUf(v?: string | null): string | null {
+  if (!v) return null;
+  const s = v.trim();
+  if (s.length === 2) return s.toUpperCase();
+  return UF_MAP[s.toLowerCase()] ?? null;
+}
+
 async function cnpjBizPost(path: string, body: unknown) {
   const token = process.env.CNPJ_BIZ_TOKEN;
   if (!token) throw new Error("CNPJ_BIZ_TOKEN não configurado");
@@ -31,9 +49,10 @@ async function cnpjBizSearchByName(name: string, cidade?: string | null, uf?: st
   if (!name) return null;
   const clean = name.replace(/[^\p{L}\p{N}\s&-]/gu, "").trim();
   if (!clean) return null;
+  const ufSigla = normalizeUf(uf);
   const localidades: any[] = [];
-  if (cidade && uf) localidades.push({ tipo: "cidade", cidade, estado: uf, pais: "BR" });
-  else if (uf) localidades.push({ tipo: "estado", estado: uf, pais: "BR" });
+  if (cidade && ufSigla) localidades.push({ tipo: "cidade", cidade, estado: ufSigla, pais: "BR" });
+  else if (ufSigla) localidades.push({ tipo: "estado", estado: ufSigla, pais: "BR" });
   try {
     const rows = await cnpjBizPost("/empresas/listar-com-dados", {
       razao_fantasia: [clean],
@@ -266,7 +285,7 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       endereco: p.address ?? null,
       bairro: p.neighborhood ?? null,
       cidade: p.city ?? job.city,
-      uf: p.state ?? null,
+      uf: normalizeUf(p.state) ?? p.state ?? null,
       website: p.website ?? null,
       google_rating: p.totalScore ?? null,
       google_reviews: p.reviewsCount ?? null,
@@ -313,17 +332,39 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
 export const enrichMissingSocios = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const { data: leads } = await supabase
-      .from("leads").select("id, cnpj").eq("user_id", userId)
-      .not("cnpj", "is", null).is("socios", null).limit(30);
+    const { supabase } = context;
+    // 1) Leads que já têm CNPJ mas sem sócios → busca detalhe direto
+    const { data: withCnpj } = await supabase
+      .from("leads").select("id, cnpj")
+      .not("cnpj", "is", null).is("socios", null).limit(50);
     let ok = 0;
-    for (const l of leads ?? []) {
+    for (const l of withCnpj ?? []) {
       const mapped = await enrichByCnpj(l.cnpj as string);
       if (!mapped) continue;
       const { cnpj: _c, ...updates } = mapped as any;
       await supabase.from("leads").update(updates).eq("id", l.id);
       ok++;
     }
-    return { processed: leads?.length ?? 0, ok };
+    // 2) Leads sem CNPJ (Apify puro) → busca por nome+cidade+uf, salva CNPJ + QSA
+    const { data: noCnpj } = await supabase
+      .from("leads").select("id, nome_fantasia, cidade, uf")
+      .is("cnpj", null).is("socios", null).limit(50);
+    let matched = 0;
+    await mapWithConcurrency(noCnpj ?? [], 5, async (l: any) => {
+      if (!l.nome_fantasia) return;
+      const hit = await cnpjBizSearchByName(l.nome_fantasia, l.cidade, l.uf);
+      if (!hit?.cnpj) return;
+      const detail = await enrichByCnpj(hit.cnpj);
+      if (!detail) {
+        await supabase.from("leads").update({ cnpj: hit.cnpj }).eq("id", l.id);
+        return;
+      }
+      const updates: Record<string, any> = {};
+      for (const [k, v] of Object.entries(detail as any)) {
+        if (v != null && v !== "") updates[k] = v;
+      }
+      await supabase.from("leads").update(updates as any).eq("id", l.id);
+      matched++;
+    });
+    return { withCnpj: withCnpj?.length ?? 0, ok, searched: noCnpj?.length ?? 0, matched };
   });
