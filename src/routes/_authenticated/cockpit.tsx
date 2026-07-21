@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
-  Timer, Building2, MapPin, ArrowRight,
+  Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3,
 } from "lucide-react";
 import {
   computeGoldenNumbers, formatBRL, formatPhoneBR, formatSeconds,
@@ -73,6 +73,23 @@ function Cockpit() {
   });
 
   const lead = leadQueue?.[0] ?? null;
+
+  const { data: cityStats } = useQuery({
+    queryKey: ["city-reviews", lead?.cidade ?? null],
+    enabled: !!lead?.cidade,
+    queryFn: async () => {
+      const { data } = await supabase.from("leads")
+        .select("id, nome_fantasia, google_reviews, google_rating")
+        .eq("cidade", lead!.cidade as string)
+        .not("google_reviews", "is", null);
+      const arr = (data ?? []).filter((r: any) => typeof r.google_reviews === "number");
+      if (!arr.length) return null;
+      const total = arr.reduce((s: number, r: any) => s + (r.google_reviews ?? 0), 0);
+      const avg = total / arr.length;
+      const max = arr.reduce((m: any, r: any) => (r.google_reviews > (m?.google_reviews ?? -1) ? r : m), null as any);
+      return { count: arr.length, avg, max };
+    },
+  });
 
   const nums = useMemo(() => {
     if (!goal) return null;
@@ -243,6 +260,71 @@ function Cockpit() {
                     </div>
                   </a>
                 )}
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-background p-4">
+                  <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                    <Users2 className="h-3.5 w-3.5" /> Proprietário & Sócios
+                  </div>
+                  {(() => {
+                    const nomes = Array.isArray(lead.socios)
+                      ? (lead.socios as any[]).map((s: any) => (typeof s === "string" ? s : s?.nome || s?.nome_socio)).filter(Boolean)
+                      : [];
+                    const prop = lead.proprietario as string | null;
+                    if (!prop && nomes.length === 0) {
+                      return <p className="mt-2 text-sm italic text-muted-foreground">Não temos o nome do proprietário/sócios deste lead.</p>;
+                    }
+                    return (
+                      <div className="mt-2 space-y-1">
+                        {prop && <p className="text-sm font-semibold">{prop} <span className="text-xs font-normal text-muted-foreground">· decisor</span></p>}
+                        {nomes.filter((n: string) => n !== prop).map((n: string, i: number) => (
+                          <p key={i} className="text-sm text-foreground/80">{n}</p>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="rounded-2xl border border-border bg-background p-4">
+                  <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                    <Star className="h-3.5 w-3.5" /> Google Reviews
+                  </div>
+                  {lead.google_reviews == null ? (
+                    <p className="mt-2 text-sm italic text-muted-foreground">Sem dados de avaliações do Google.</p>
+                  ) : (
+                    <div className="mt-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-bold tabular-nums">{lead.google_reviews}</span>
+                        <span className="text-xs text-muted-foreground">avaliações</span>
+                        {lead.google_rating != null && (
+                          <span className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-amber-600">
+                            <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{Number(lead.google_rating).toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+                      {cityStats && (
+                        <div className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> vs. {cityStats.count} autoescolas em {lead.cidade}</div>
+                          {(() => {
+                            const diff = (lead.google_reviews ?? 0) - cityStats.avg;
+                            const pct = cityStats.avg > 0 ? Math.round((diff / cityStats.avg) * 100) : 0;
+                            const above = diff >= 0;
+                            return (
+                              <div className="mt-1 space-y-0.5">
+                                <p>Média da cidade: <b className="text-foreground">{cityStats.avg.toFixed(0)}</b></p>
+                                <p>Líder: <b className="text-foreground">{cityStats.max?.nome_fantasia ?? "—"}</b> ({cityStats.max?.google_reviews})</p>
+                                <p className={above ? "text-emerald-600" : "text-rose-600"}>
+                                  {above ? "▲" : "▼"} {Math.abs(pct)}% {above ? "acima" : "abaixo"} da média
+                                </p>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
