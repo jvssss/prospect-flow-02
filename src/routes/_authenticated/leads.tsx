@@ -163,6 +163,31 @@ function LeadsPage() {
 }
 
 function EnrichCnpjButton({ lead }: { lead: any }) {
+  return <_EnrichCnpjButtonImpl lead={lead} />;
+}
+
+function BackfillSociosButton({ onDone }: { onDone: () => void }) {
+  const run = useServerFn(enrichMissingSocios);
+  const [loading, setLoading] = useState(false);
+  async function go() {
+    setLoading(true);
+    try {
+      const r: any = await run();
+      toast.success(`Sócios: ${r?.ok ?? 0} atualizados · ${r?.matched ?? 0} novos CNPJs encontrados`);
+      onDone();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao buscar sócios");
+    } finally { setLoading(false); }
+  }
+  return (
+    <Button variant="outline" className="rounded-2xl" onClick={go} disabled={loading}>
+      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+      Buscar sócios
+    </Button>
+  );
+}
+
+function _EnrichCnpjButtonImpl({ lead }: { lead: any }) {
   const qc = useQueryClient();
   const enrich = useServerFn(enrichLeadCnpj);
   const [loading, setLoading] = useState(false);
