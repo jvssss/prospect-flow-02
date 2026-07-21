@@ -1,0 +1,1 @@
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS followup_at TIMESTAMPTZ; ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS followup_notes TEXT;

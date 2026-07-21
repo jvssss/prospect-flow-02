@@ -233,7 +233,8 @@ export const startEnrichmentJob = createServerFn({ method: "POST" })
 
     try {
       const run = await apifyStartRun({
-        searchStringsArray: [`${data.niche} ${data.city}`],
+        searchStringsArray: [data.niche],
+        locationQuery: `${data.city}, Brasil`,
         maxCrawledPlacesPerSearch: data.maxResults ?? 40,
         language: "pt-BR",
         countryCode: "br",
@@ -273,7 +274,17 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
 
     // Ingestion
     const items = await apifyGetItems(run.defaultDatasetId);
-    const baseRows = items.map((p: any) => ({
+    // Normalização para comparar cidades ("São Paulo" == "sao paulo")
+    const norm = (s?: string | null) =>
+      (s ?? "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const targetCity = norm(job.city);
+    // Filtro geográfico: só aceitar locais cuja cidade bata com a buscada.
+    // Isso evita retornar autoescolas cujo NOME contém "Santa Marina" mas ficam em outra cidade.
+    const filteredItems = items.filter((p: any) => {
+      const c = norm(p.city ?? p.address ?? "");
+      return targetCity && (c === targetCity || c.includes(targetCity));
+    });
+    const baseRows = filteredItems.map((p: any) => ({
       user_id: userId,
       source: "apify_gmaps",
       enrichment_job_id: job.id,

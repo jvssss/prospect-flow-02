@@ -108,7 +108,7 @@ function LeadsPage() {
           <div className="mb-4 flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="rounded-xl pl-9" placeholder="Buscar por nome, telefone, bairro..." value={q} onChange={(e) => setQ(e.target.value)} />
+              <Input className="rounded-xl pl-9" placeholder="Buscar por nome, telefone, cidade..." value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger className="w-56 rounded-xl"><SelectValue /></SelectTrigger>
@@ -124,7 +124,7 @@ function LeadsPage() {
                 <TableRow>
                   <TableHead>Empresa</TableHead>
                   <TableHead>Telefone</TableHead>
-                  <TableHead>Bairro</TableHead>
+                  <TableHead>Cidade</TableHead>
                   <TableHead>Capital</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead></TableHead>
@@ -139,7 +139,7 @@ function LeadsPage() {
                       {l.cnpj && <div className="text-xs text-muted-foreground tabular-nums">CNPJ {l.cnpj}</div>}
                     </TableCell>
                     <TableCell className="tabular-nums">{formatPhoneBR(l.telefone_1) || "—"}</TableCell>
-                    <TableCell>{l.bairro ?? "—"}</TableCell>
+                    <TableCell>{l.cidade ?? "—"}</TableCell>
                     <TableCell className="tabular-nums">{l.capital_social ? formatBRL(Number(l.capital_social)) : "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="rounded-full">{l.status}</Badge></TableCell>
                     <TableCell className="text-right">

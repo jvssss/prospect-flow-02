@@ -203,6 +203,8 @@ export type Database = {
           email: string | null
           endereco: string | null
           enrichment_job_id: string | null
+          followup_at: string | null
+          followup_notes: string | null
           google_rating: number | null
           google_reviews: number | null
           id: string
@@ -244,6 +246,8 @@ export type Database = {
           email?: string | null
           endereco?: string | null
           enrichment_job_id?: string | null
+          followup_at?: string | null
+          followup_notes?: string | null
           google_rating?: number | null
           google_reviews?: number | null
           id?: string
@@ -285,6 +289,8 @@ export type Database = {
           email?: string | null
           endereco?: string | null
           enrichment_job_id?: string | null
+          followup_at?: string | null
+          followup_notes?: string | null
           google_rating?: number | null
           google_reviews?: number | null
           id?: string

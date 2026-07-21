@@ -292,7 +292,13 @@ function LeadCard({ lead, onOpen, onMove, onCloserAction, showSdrActions, showCl
           {lead.proprietario && <div className="truncate text-xs text-muted-foreground">{lead.proprietario}</div>}
           <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
             {lead.telefone_1 && <div className="tabular-nums">📞 {formatPhoneBR(lead.telefone_1)}</div>}
-            {lead.cidade && <div>📍 {lead.cidade}{lead.bairro ? ` · ${lead.bairro}` : ""}</div>}
+            {lead.cidade && <div>📍 {lead.cidade}</div>}
+            {lead.followup_at && (
+              <div className="flex items-center gap-1 text-violet-700">
+                🔁 Follow-up: {new Date(lead.followup_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                {lead.followup_notes ? <span className="truncate text-muted-foreground"> · {lead.followup_notes}</span> : null}
+              </div>
+            )}
             {meetingDate && (
               <div className="flex items-center justify-between text-emerald-700">
                 <span>🗓 {meetingDate.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>

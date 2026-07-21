@@ -125,10 +125,13 @@ function Cockpit() {
   const [returnAt, setReturnAt] = useState("");
   const [nomeDecisor, setNomeDecisor] = useState("");
   const [callNotes, setCallNotes] = useState("");
+  const [followupAt, setFollowupAt] = useState("");
+  const [followupNotes, setFollowupNotes] = useState("");
 
   // reset campos ao trocar de lead
   useEffect(() => {
     setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
+    setFollowupAt(""); setFollowupNotes("");
   }, [lead?.id]);
 
   async function logOutcome(o: Outcome) {
@@ -156,6 +159,10 @@ function Cockpit() {
       if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(returnAt).toISOString();
     }
     if (nomeDecisor) leadUpdate.proprietario = nomeDecisor;
+    if (followupAt) {
+      leadUpdate.followup_at = new Date(followupAt).toISOString();
+      if (followupNotes) leadUpdate.followup_notes = followupNotes;
+    }
     const { error: uErr } = await supabase.from("leads").update(leadUpdate as any).eq("id", lead.id);
     if (uErr) return toast.error(uErr.message);
 
@@ -182,6 +189,7 @@ function Cockpit() {
     );
 
     setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
+    setFollowupAt(""); setFollowupNotes("");
     toast.success(`Registrado: ${meta.label}`);
     qc.invalidateQueries({ queryKey: ["daily-metric", day] });
     qc.invalidateQueries({ queryKey: ["crm-leads"] });
@@ -198,7 +206,7 @@ function Cockpit() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead?.id, nomePonte, returnAt, nomeDecisor, callNotes, metrics]);
+  }, [lead?.id, nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes, metrics]);
 
   if (!goal) {
     return (
@@ -367,6 +375,16 @@ function Cockpit() {
                   <Input placeholder="Ex: João Silva" className="rounded-xl" value={nomeDecisor} onChange={(e) => setNomeDecisor(e.target.value)} />
                   <p className="mt-1 text-[11px] text-muted-foreground">Salva como proprietário do lead.</p>
                 </div>
+                {nomeDecisor && (
+                  <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
+                    <Label className="text-primary">Follow-up combinado com {nomeDecisor}</Label>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <Input type="datetime-local" className="rounded-xl" value={followupAt} onChange={(e) => setFollowupAt(e.target.value)} />
+                      <Input placeholder="Motivo (ex: enviar proposta)" className="rounded-xl" value={followupNotes} onChange={(e) => setFollowupNotes(e.target.value)} />
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Aparece no CRM SDR do lead.</p>
+                  </div>
+                )}
                 <div>
                   <Label>Observações da ligação</Label>
                   <Textarea placeholder="Contexto, objeção, próximos passos…" className="min-h-20 rounded-xl" value={callNotes} onChange={(e) => setCallNotes(e.target.value)} />

@@ -65,6 +65,9 @@ export function LeadDetailDialog({ lead, open, onOpenChange }: { lead: any | nul
               <Info icon={DollarSign} label="Capital social" value={lead.capital_social ? `R$ ${Number(lead.capital_social).toLocaleString("pt-BR")}` : null} />
               <Info icon={Calendar} label="Abertura" value={lead.data_abertura} />
               <Info icon={Users2} label="Sócios" value={sociosString(lead.socios)} full />
+              {lead.followup_at && (
+                <Info icon={Calendar} label="Follow-up" value={`${new Date(lead.followup_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${lead.followup_notes ? " · " + lead.followup_notes : ""}`} full />
+              )}
             </TabsContent>
 
             <TabsContent value="qual" className="mt-4">
