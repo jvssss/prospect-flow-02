@@ -90,10 +90,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Cockpit ultra-ágil para SDR/BDR: 60 a 65 ligações em 1h30 com ritmo, hotkeys e metas matemáticas.",
+          "SaaS de prospecção ultra-ágil para SDR/BDR: cockpit de foco, Números de Ouro e diário de bordo para bater metas com clareza matemática.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Meta Prospect — Matemática do Faturamento" },
+      { name: "twitter:description", content: "SaaS de prospecção ultra-ágil para SDR/BDR: cockpit de foco, Números de Ouro e diário de bordo para bater metas com clareza matemática." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a96f6adb-4edf-49a7-a005-b04a8db51bca/id-preview-09e5ef89--bd8591a5-dc52-49d9-9b31-56af768f030f.lovable.app-1784593943483.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a96f6adb-4edf-49a7-a005-b04a8db51bca/id-preview-09e5ef89--bd8591a5-dc52-49d9-9b31-56af768f030f.lovable.app-1784593943483.png" },
     ],
     links: [
       {
