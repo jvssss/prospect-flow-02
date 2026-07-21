@@ -285,7 +285,7 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       endereco: p.address ?? null,
       bairro: p.neighborhood ?? null,
       cidade: p.city ?? job.city,
-      uf: p.state ?? null,
+      uf: normalizeUf(p.state) ?? p.state ?? null,
       website: p.website ?? null,
       google_rating: p.totalScore ?? null,
       google_reviews: p.reviewsCount ?? null,
