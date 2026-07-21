@@ -153,7 +153,7 @@ function Cockpit() {
       pipeline_stage: stageMap[o],
       last_call_at: new Date().toISOString(),
     };
-    if (o === "gatekeeper" && nomePonte) leadUpdate.nome_ponte = nomePonte;
+    if (nomePonte) leadUpdate.nome_ponte = nomePonte;
     if ((o === "callback" || o === "meeting_scheduled") && returnAt) {
       leadUpdate.retorno_agendado_em = new Date(returnAt).toISOString();
       if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(returnAt).toISOString();
