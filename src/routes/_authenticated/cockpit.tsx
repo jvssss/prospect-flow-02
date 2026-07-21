@@ -156,7 +156,7 @@ function Cockpit() {
       if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(returnAt).toISOString();
     }
     if (nomeDecisor) leadUpdate.proprietario = nomeDecisor;
-    const { error: uErr } = await supabase.from("leads").update(leadUpdate).eq("id", lead.id);
+    const { error: uErr } = await supabase.from("leads").update(leadUpdate as any).eq("id", lead.id);
     if (uErr) return toast.error(uErr.message);
 
     const { error: cErr } = await supabase.from("call_logs").insert({
