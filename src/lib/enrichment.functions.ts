@@ -49,9 +49,10 @@ async function cnpjBizSearchByName(name: string, cidade?: string | null, uf?: st
   if (!name) return null;
   const clean = name.replace(/[^\p{L}\p{N}\s&-]/gu, "").trim();
   if (!clean) return null;
+  const ufSigla = normalizeUf(uf);
   const localidades: any[] = [];
-  if (cidade && uf) localidades.push({ tipo: "cidade", cidade, estado: uf, pais: "BR" });
-  else if (uf) localidades.push({ tipo: "estado", estado: uf, pais: "BR" });
+  if (cidade && ufSigla) localidades.push({ tipo: "cidade", cidade, estado: ufSigla, pais: "BR" });
+  else if (ufSigla) localidades.push({ tipo: "estado", estado: ufSigla, pais: "BR" });
   try {
     const rows = await cnpjBizPost("/empresas/listar-com-dados", {
       razao_fantasia: [clean],
