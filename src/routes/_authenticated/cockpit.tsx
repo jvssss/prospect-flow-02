@@ -11,9 +11,10 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
-  Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3,
+  Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   computeGoldenNumbers, formatBRL, formatPhoneBR, formatSeconds,
   whatsappLink, type GoalsInput,
@@ -44,6 +45,39 @@ function todayISO() { return new Date().toISOString().slice(0, 10); }
 
 function Cockpit() {
   const qc = useQueryClient();
+  const [city, setCity] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("cockpit-city") ?? "";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem("cockpit-city", city);
+  }, [city]);
+
+  // Cidades disponíveis (com leads ainda ativos)
+  const { data: cities = [] } = useQuery({
+    queryKey: ["cockpit-cities"],
+    queryFn: async () => {
+      const { data } = await supabase.from("leads").select("cidade")
+        .in("status", ["new", "no_answer", "gatekeeper", "callback"])
+        .not("cidade", "is", null);
+      const map = new Map<string, number>();
+      (data ?? []).forEach((r: any) => {
+        const c = (r.cidade ?? "").trim();
+        if (c) map.set(c, (map.get(c) ?? 0) + 1);
+      });
+      return Array.from(map.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => ({ name, count }));
+    },
+  });
+
+  // Se cidade escolhida não existe mais, escolhe a com mais leads
+  useEffect(() => {
+    if (cities.length === 0) return;
+    if (!city || !cities.some((c) => c.name === city)) {
+      setCity(cities[0].name);
+    }
+  }, [cities, city]);
 
   const { data: goal } = useQuery({
     queryKey: ["goals-active"],
@@ -63,9 +97,11 @@ function Cockpit() {
   });
 
   const { data: leadQueue, refetch: refetchQueue } = useQuery({
-    queryKey: ["cockpit-queue"],
+    queryKey: ["cockpit-queue", city],
+    enabled: !!city,
     queryFn: async () => {
       const { data } = await supabase.from("leads").select("*")
+        .eq("cidade", city)
         .in("status", ["new", "no_answer", "gatekeeper", "callback"])
         .order("last_call_at", { ascending: true, nullsFirst: true })
         .limit(1);
@@ -194,6 +230,7 @@ function Cockpit() {
     qc.invalidateQueries({ queryKey: ["daily-metric", day] });
     qc.invalidateQueries({ queryKey: ["crm-leads"] });
     qc.invalidateQueries({ queryKey: ["leads"] });
+    qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
     refetchQueue();
   }
 
@@ -231,18 +268,47 @@ function Cockpit() {
           <h1 className="text-3xl font-bold tracking-tight">Modo Foco</h1>
           <p className="mt-1 text-muted-foreground">{done} / {target} ligações hoje · meta: {formatBRL(nums?.monthly.revenue ?? 0)}</p>
         </div>
-        <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm">
-          <Timer className="mr-1 h-3.5 w-3.5" /> Tempo por call: {formatSeconds(nums?.daily.secondsPerCall ?? 0)}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-2 py-1">
+            <MapPinned className="ml-1 h-3.5 w-3.5 text-primary" />
+            <Select value={city || undefined} onValueChange={(v) => { setCity(v); toast.success(`Cidade: ${v}`); }}>
+              <SelectTrigger className="h-8 min-w-44 border-0 bg-transparent shadow-none focus:ring-0">
+                <SelectValue placeholder="Escolher cidade" />
+              </SelectTrigger>
+              <SelectContent>
+                {cities.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">Sem cidades com leads ativos</div>}
+                {cities.map((c) => (
+                  <SelectItem key={c.name} value={c.name}>{c.name} · {c.count}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm">
+            <Timer className="mr-1 h-3.5 w-3.5" /> Tempo por call: {formatSeconds(nums?.daily.secondsPerCall ?? 0)}
+          </Badge>
+        </div>
       </div>
 
       <Progress value={pct} className="mb-6 h-2 rounded-full" />
 
       {!lead ? (
         <Card className="rounded-3xl border-dashed border-border p-10 text-center">
-          <p className="text-lg font-medium">Fila vazia 🎉</p>
-          <p className="mt-1 text-muted-foreground">Importe leads para continuar prospectando.</p>
-          <Button asChild className="mt-6 rounded-2xl"><Link to="/leads">Ir para Leads</Link></Button>
+          <p className="text-lg font-medium">
+            {city ? `Fila de ${city} concluída 🎉` : "Nenhuma cidade selecionada"}
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            {cities.length > 1
+              ? "Escolha outra cidade acima para continuar prospectando."
+              : "Importe leads para continuar prospectando."}
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {cities.filter((c) => c.name !== city).slice(0, 4).map((c) => (
+              <Button key={c.name} variant="outline" className="rounded-2xl" onClick={() => { setCity(c.name); toast.success(`Cidade: ${c.name}`); }}>
+                <MapPinned className="mr-2 h-4 w-4" />{c.name} <span className="ml-1 text-xs text-muted-foreground">· {c.count}</span>
+              </Button>
+            ))}
+            <Button asChild className="rounded-2xl"><Link to="/leads">Ir para Leads</Link></Button>
+          </div>
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -322,7 +388,15 @@ function Cockpit() {
                     <Star className="h-3.5 w-3.5" /> Google Reviews
                   </div>
                   {lead.google_reviews == null ? (
-                    <p className="mt-2 text-sm italic text-muted-foreground">Sem dados de avaliações do Google.</p>
+                    <div className="mt-2 space-y-2">
+                      <p className="text-sm italic text-muted-foreground">Sem dados de avaliações do Google para este lead.</p>
+                      {cityStats && (
+                        <div className="border-t border-border pt-2 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> {cityStats.count} autoescolas de {lead.cidade} com reviews</div>
+                          <p className="mt-1">Média: <b className="text-foreground">{cityStats.avg.toFixed(0)}</b> · Líder: <b className="text-foreground">{cityStats.max?.nome_fantasia ?? "—"}</b> ({cityStats.max?.google_reviews})</p>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="mt-2">
                       <div className="flex items-baseline gap-2">
@@ -334,7 +408,7 @@ function Cockpit() {
                           </span>
                         )}
                       </div>
-                      {cityStats && (
+                      {cityStats && cityStats.count > 1 ? (
                         <div className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
                           <div className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> vs. {cityStats.count} autoescolas em {lead.cidade}</div>
                           {(() => {
@@ -352,6 +426,10 @@ function Cockpit() {
                             );
                           })()}
                         </div>
+                      ) : (
+                        <p className="mt-3 border-t border-border pt-2 text-xs italic text-muted-foreground">
+                          Sem outras autoescolas em {lead.cidade ?? "—"} com reviews para comparar. Rode "Buscar no Google Maps" para trazer mais concorrentes.
+                        </p>
                       )}
                     </div>
                   )}
