@@ -13,6 +13,7 @@ import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
   Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   computeGoldenNumbers, formatBRL, formatPhoneBR, formatSeconds,
   whatsappLink, type GoalsInput,
@@ -122,6 +123,13 @@ function Cockpit() {
 
   const [nomePonte, setNomePonte] = useState("");
   const [returnAt, setReturnAt] = useState("");
+  const [nomeDecisor, setNomeDecisor] = useState("");
+  const [callNotes, setCallNotes] = useState("");
+
+  // reset campos ao trocar de lead
+  useEffect(() => {
+    setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
+  }, [lead?.id]);
 
   async function logOutcome(o: Outcome) {
     if (!lead) return;
@@ -130,13 +138,25 @@ function Cockpit() {
     const durationSeconds = Math.max(1, Math.floor((Date.now() - startedAt.current) / 1000));
 
     const meta = OUTCOMES.find((x) => x.key === o)!;
-    const { error: uErr } = await supabase.from("leads").update({
+    const stageMap: Record<Outcome, string> = {
+      no_answer: "in_contact",
+      gatekeeper: "in_contact",
+      callback: "in_contact",
+      not_interested: "dismissed",
+      meeting_scheduled: "scheduled",
+    };
+    const leadUpdate: Record<string, any> = {
       status: meta.status,
+      pipeline_stage: stageMap[o],
       last_call_at: new Date().toISOString(),
-      nome_ponte: o === "gatekeeper" && nomePonte ? nomePonte : undefined,
-      retorno_agendado_em: (o === "callback" || o === "meeting_scheduled") && returnAt
-        ? new Date(returnAt).toISOString() : undefined,
-    }).eq("id", lead.id);
+    };
+    if (o === "gatekeeper" && nomePonte) leadUpdate.nome_ponte = nomePonte;
+    if ((o === "callback" || o === "meeting_scheduled") && returnAt) {
+      leadUpdate.retorno_agendado_em = new Date(returnAt).toISOString();
+      if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(returnAt).toISOString();
+    }
+    if (nomeDecisor) leadUpdate.proprietario = nomeDecisor;
+    const { error: uErr } = await supabase.from("leads").update(leadUpdate).eq("id", lead.id);
     if (uErr) return toast.error(uErr.message);
 
     const { error: cErr } = await supabase.from("call_logs").insert({
@@ -144,6 +164,7 @@ function Cockpit() {
       duration_seconds: durationSeconds,
       nome_ponte: nomePonte || null,
       scheduled_return_at: returnAt ? new Date(returnAt).toISOString() : null,
+      notes: [nomeDecisor ? `Decisor: ${nomeDecisor}` : null, callNotes || null].filter(Boolean).join(" · ") || null,
     });
     if (cErr) return toast.error(cErr.message);
 
@@ -160,9 +181,11 @@ function Cockpit() {
       { onConflict: "user_id,day" }
     );
 
-    setNomePonte(""); setReturnAt("");
+    setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
     toast.success(`Registrado: ${meta.label}`);
     qc.invalidateQueries({ queryKey: ["daily-metric", day] });
+    qc.invalidateQueries({ queryKey: ["crm-leads"] });
+    qc.invalidateQueries({ queryKey: ["leads"] });
     refetchQueue();
   }
 
@@ -175,7 +198,7 @@ function Cockpit() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead?.id, nomePonte, returnAt, metrics]);
+  }, [lead?.id, nomePonte, returnAt, nomeDecisor, callNotes, metrics]);
 
   if (!goal) {
     return (
