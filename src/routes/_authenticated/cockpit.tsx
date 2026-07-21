@@ -361,6 +361,18 @@ function Cockpit() {
                 </div>
               </div>
 
+              <div className="mt-3 grid gap-3">
+                <div>
+                  <Label>Nome do Decisor (se conseguiu falar)</Label>
+                  <Input placeholder="Ex: João Silva" className="rounded-xl" value={nomeDecisor} onChange={(e) => setNomeDecisor(e.target.value)} />
+                  <p className="mt-1 text-[11px] text-muted-foreground">Salva como proprietário do lead.</p>
+                </div>
+                <div>
+                  <Label>Observações da ligação</Label>
+                  <Textarea placeholder="Contexto, objeção, próximos passos…" className="min-h-20 rounded-xl" value={callNotes} onChange={(e) => setCallNotes(e.target.value)} />
+                </div>
+              </div>
+
               <div className="mt-4 h-1 overflow-hidden rounded-full bg-secondary">
                 <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, timerPct)}%` }} />
               </div>
