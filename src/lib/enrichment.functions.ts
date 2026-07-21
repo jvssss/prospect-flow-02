@@ -332,17 +332,37 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
 export const enrichMissingSocios = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const { data: leads } = await supabase
-      .from("leads").select("id, cnpj").eq("user_id", userId)
-      .not("cnpj", "is", null).is("socios", null).limit(30);
+    const { supabase } = context;
+    // 1) Leads que já têm CNPJ mas sem sócios → busca detalhe direto
+    const { data: withCnpj } = await supabase
+      .from("leads").select("id, cnpj")
+      .not("cnpj", "is", null).is("socios", null).limit(50);
     let ok = 0;
-    for (const l of leads ?? []) {
+    for (const l of withCnpj ?? []) {
       const mapped = await enrichByCnpj(l.cnpj as string);
       if (!mapped) continue;
       const { cnpj: _c, ...updates } = mapped as any;
       await supabase.from("leads").update(updates).eq("id", l.id);
       ok++;
     }
-    return { processed: leads?.length ?? 0, ok };
+    // 2) Leads sem CNPJ (Apify puro) → busca por nome+cidade+uf, salva CNPJ + QSA
+    const { data: noCnpj } = await supabase
+      .from("leads").select("id, nome_fantasia, cidade, uf")
+      .is("cnpj", null).is("socios", null).limit(50);
+    let matched = 0;
+    await mapWithConcurrency(noCnpj ?? [], 5, async (l: any) => {
+      if (!l.nome_fantasia) return;
+      const hit = await cnpjBizSearchByName(l.nome_fantasia, l.cidade, l.uf);
+      if (!hit?.cnpj) return;
+      const detail = await enrichByCnpj(hit.cnpj);
+      if (!detail) {
+        await supabase.from("leads").update({ cnpj: hit.cnpj }).eq("id", l.id);
+        return;
+      }
+      const { cnpj, ...rest } = detail as any;
+      const updates = Object.fromEntries(Object.entries({ cnpj, ...rest }).filter(([, v]) => v != null && v !== ""));
+      await supabase.from("leads").update(updates).eq("id", l.id);
+      matched++;
+    });
+    return { withCnpj: withCnpj?.length ?? 0, ok, searched: noCnpj?.length ?? 0, matched };
   });
