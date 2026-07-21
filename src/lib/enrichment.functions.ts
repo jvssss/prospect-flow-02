@@ -359,9 +359,11 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
         await supabase.from("leads").update({ cnpj: hit.cnpj }).eq("id", l.id);
         return;
       }
-      const { cnpj, ...rest } = detail as any;
-      const updates = Object.fromEntries(Object.entries({ cnpj, ...rest }).filter(([, v]) => v != null && v !== ""));
-      await supabase.from("leads").update(updates).eq("id", l.id);
+      const updates: Record<string, any> = {};
+      for (const [k, v] of Object.entries(detail as any)) {
+        if (v != null && v !== "") updates[k] = v;
+      }
+      await supabase.from("leads").update(updates as any).eq("id", l.id);
       matched++;
     });
     return { withCnpj: withCnpj?.length ?? 0, ok, searched: noCnpj?.length ?? 0, matched };
