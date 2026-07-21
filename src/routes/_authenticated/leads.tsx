@@ -40,6 +40,11 @@ function LeadsPage() {
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const [cityFilter, setCityFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [hasCnpj, setHasCnpj] = useState("all");
+  const [hasReviews, setHasReviews] = useState("all");
+  const [sort, setSort] = useState("recent");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: leads = [] } = useQuery({
@@ -53,14 +58,51 @@ function LeadsPage() {
     },
   });
 
+  const cityOptions = useMemo(() => {
+    const map = new Map<string, number>();
+    leads.forEach((l: any) => {
+      const c = (l.cidade ?? "").trim();
+      if (c) map.set(c, (map.get(c) ?? 0) + 1);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [leads]);
+
+  const sourceOptions = useMemo(() => {
+    const set = new Set<string>();
+    leads.forEach((l: any) => { if (l.source) set.add(l.source); });
+    return Array.from(set).sort();
+  }, [leads]);
+
   const filtered = useMemo(() => {
-    if (!q) return leads;
-    const t = q.toLowerCase();
-    return leads.filter((l) =>
-      [l.nome_fantasia, l.razao_social, l.bairro, l.cidade, l.telefone_1, l.telefone_2, l.cnpj]
-        .filter(Boolean).some((s) => String(s).toLowerCase().includes(t))
-    );
-  }, [leads, q]);
+    const t = q.trim().toLowerCase();
+    let out = leads.filter((l: any) => {
+      if (cityFilter !== "all" && (l.cidade ?? "").trim() !== cityFilter) return false;
+      if (sourceFilter !== "all" && l.source !== sourceFilter) return false;
+      if (hasCnpj === "yes" && !l.cnpj) return false;
+      if (hasCnpj === "no" && l.cnpj) return false;
+      if (hasReviews === "yes" && l.google_reviews == null) return false;
+      if (hasReviews === "no" && l.google_reviews != null) return false;
+      if (t && ![l.nome_fantasia, l.razao_social, l.bairro, l.cidade, l.telefone_1, l.telefone_2, l.cnpj]
+        .filter(Boolean).some((s) => String(s).toLowerCase().includes(t))) return false;
+      return true;
+    });
+    if (sort === "reviews") {
+      out = [...out].sort((a: any, b: any) => (b.google_reviews ?? -1) - (a.google_reviews ?? -1));
+    } else if (sort === "capital") {
+      out = [...out].sort((a: any, b: any) => Number(b.capital_social ?? 0) - Number(a.capital_social ?? 0));
+    } else if (sort === "city") {
+      out = [...out].sort((a: any, b: any) => (a.cidade ?? "").localeCompare(b.cidade ?? ""));
+    }
+    return out;
+  }, [leads, q, cityFilter, sourceFilter, hasCnpj, hasReviews, sort]);
+
+  function clearFilters() {
+    setQ(""); setStatus("all"); setCityFilter("all"); setSourceFilter("all");
+    setHasCnpj("all"); setHasReviews("all"); setSort("recent");
+  }
+  const activeFilters =
+    (status !== "all" ? 1 : 0) + (cityFilter !== "all" ? 1 : 0) + (sourceFilter !== "all" ? 1 : 0) +
+    (hasCnpj !== "all" ? 1 : 0) + (hasReviews !== "all" ? 1 : 0);
 
   const del = useMutation({
     mutationFn: async (id: string) => {
@@ -105,17 +147,64 @@ function LeadsPage() {
 
       <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
         <CardContent className="p-4">
-          <div className="mb-4 flex flex-wrap gap-3">
+          <div className="mb-3 flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="rounded-xl pl-9" placeholder="Buscar por nome, telefone, cidade..." value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-56 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-44 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {STATUSES.map((s) => <SelectItem key={s.v} value={s.v}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Select value={cityFilter} onValueChange={setCityFilter}>
+              <SelectTrigger className="w-52 rounded-xl"><SelectValue placeholder="Cidade" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as cidades</SelectItem>
+                {cityOptions.map(([name, n]) => <SelectItem key={name} value={name}>{name} · {n}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-40 rounded-xl"><SelectValue placeholder="Origem" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas origens</SelectItem>
+                {sourceOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={hasCnpj} onValueChange={setHasCnpj}>
+              <SelectTrigger className="w-40 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">CNPJ: todos</SelectItem>
+                <SelectItem value="yes">Com CNPJ</SelectItem>
+                <SelectItem value="no">Sem CNPJ</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={hasReviews} onValueChange={setHasReviews}>
+              <SelectTrigger className="w-44 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Google: todos</SelectItem>
+                <SelectItem value="yes">Com avaliações</SelectItem>
+                <SelectItem value="no">Sem avaliações</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger className="w-44 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Mais recentes</SelectItem>
+                <SelectItem value="reviews">Mais avaliações</SelectItem>
+                <SelectItem value="capital">Maior capital</SelectItem>
+                <SelectItem value="city">Cidade (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{filtered.length} de {leads.length}</span>
+              {activeFilters > 0 && (
+                <Button size="sm" variant="ghost" className="h-7 rounded-lg" onClick={clearFilters}>Limpar filtros</Button>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-border">
@@ -126,6 +215,7 @@ function LeadsPage() {
                   <TableHead>Telefone</TableHead>
                   <TableHead>Cidade</TableHead>
                   <TableHead>Capital</TableHead>
+                  <TableHead>Reviews</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -141,6 +231,7 @@ function LeadsPage() {
                     <TableCell className="tabular-nums">{formatPhoneBR(l.telefone_1) || "—"}</TableCell>
                     <TableCell>{l.cidade ?? "—"}</TableCell>
                     <TableCell className="tabular-nums">{l.capital_social ? formatBRL(Number(l.capital_social)) : "—"}</TableCell>
+                    <TableCell className="tabular-nums">{l.google_reviews ?? "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="rounded-full">{l.status}</Badge></TableCell>
                     <TableCell className="text-right">
                       <EnrichCnpjButton lead={l} />
@@ -151,7 +242,7 @@ function LeadsPage() {
                   </TableRow>
                 ))}
                 {filtered.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">Nenhum lead encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Nenhum lead encontrado.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
