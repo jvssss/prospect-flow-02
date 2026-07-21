@@ -80,7 +80,7 @@ function Cockpit() {
     queryFn: async () => {
       const { data } = await supabase.from("leads")
         .select("id, nome_fantasia, google_reviews, google_rating")
-        .eq("cidade", lead!.cidade)
+        .eq("cidade", lead!.cidade as string)
         .not("google_reviews", "is", null);
       const arr = (data ?? []).filter((r: any) => typeof r.google_reviews === "number");
       if (!arr.length) return null;
