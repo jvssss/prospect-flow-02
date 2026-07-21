@@ -388,7 +388,15 @@ function Cockpit() {
                     <Star className="h-3.5 w-3.5" /> Google Reviews
                   </div>
                   {lead.google_reviews == null ? (
-                    <p className="mt-2 text-sm italic text-muted-foreground">Sem dados de avaliações do Google.</p>
+                    <div className="mt-2 space-y-2">
+                      <p className="text-sm italic text-muted-foreground">Sem dados de avaliações do Google para este lead.</p>
+                      {cityStats && (
+                        <div className="border-t border-border pt-2 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> {cityStats.count} autoescolas de {lead.cidade} com reviews</div>
+                          <p className="mt-1">Média: <b className="text-foreground">{cityStats.avg.toFixed(0)}</b> · Líder: <b className="text-foreground">{cityStats.max?.nome_fantasia ?? "—"}</b> ({cityStats.max?.google_reviews})</p>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="mt-2">
                       <div className="flex items-baseline gap-2">
@@ -400,7 +408,7 @@ function Cockpit() {
                           </span>
                         )}
                       </div>
-                      {cityStats && (
+                      {cityStats && cityStats.count > 1 ? (
                         <div className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
                           <div className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> vs. {cityStats.count} autoescolas em {lead.cidade}</div>
                           {(() => {
@@ -418,6 +426,10 @@ function Cockpit() {
                             );
                           })()}
                         </div>
+                      ) : (
+                        <p className="mt-3 border-t border-border pt-2 text-xs italic text-muted-foreground">
+                          Sem outras autoescolas em {lead.cidade ?? "—"} com reviews para comparar. Rode "Buscar no Google Maps" para trazer mais concorrentes.
+                        </p>
                       )}
                     </div>
                   )}
