@@ -4,8 +4,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 // =====================================================================
 // CNPJ enrichment
-//   - Etapa B: Descobridor de CNPJ (DuckDuckGo HTML + regex)
-//   - Etapa C: open.cnpja.com/office/{cnpj}  (5 req/min → fila serial c/ 12,5s)
+//   - Etapa B: Busca por nome+UF via api.cnpja.com/office (já retorna QSA)
+//   - Etapa C: api.cnpja.com/office/{cnpj} para lookup direto por CNPJ
+//   - Fallback: DuckDuckGo HTML + open.cnpja.com se a paga falhar
 // =====================================================================
 
 const UF_MAP: Record<string, string> = {
@@ -87,23 +88,74 @@ async function findCnpjByText(nome: string, cidade?: string | null): Promise<str
   }
 }
 
+const CNPJA_BASE = "https://api.cnpja.com";
+const CNPJA_OPEN_BASE = "https://open.cnpja.com";
+
+function cnpjaHeaders(): Record<string, string> {
+  const key = process.env.CNPJA_API_KEY;
+  const h: Record<string, string> = { accept: "application/json", "user-agent": BROWSER_UA };
+  if (key) h["Authorization"] = key;
+  return h;
+}
+
 /** Sinal ao orquestrador de que precisamos aguardar (429). */
 class RateLimitError extends Error {
   constructor() { super("open.cnpja rate limited"); }
 }
 
-/** GET open.cnpja.com/office/{cnpj} — retorna payload cru ou lança. */
+/** GET /office/{cnpj} — usa api.cnpja.com se CNPJA_API_KEY setada, senão open.cnpja. */
 async function fetchCnpjaOffice(cnpj: string): Promise<any> {
   const clean = cnpj.replace(/\D/g, "");
   if (clean.length !== 14) throw new Error("CNPJ inválido");
+  const base = process.env.CNPJA_API_KEY ? CNPJA_BASE : CNPJA_OPEN_BASE;
   const res = await fetchWithTimeout(
-    `https://open.cnpja.com/office/${clean}`,
-    { headers: { accept: "application/json", "user-agent": BROWSER_UA } },
-    10000,
+    `${base}/office/${clean}`,
+    { headers: cnpjaHeaders() },
+    12000,
   );
   if (res.status === 429) throw new RateLimitError();
-  if (!res.ok) throw new Error(`open.cnpja ${res.status}`);
+  if (!res.ok) throw new Error(`cnpja ${res.status}`);
   return res.json();
+}
+
+/**
+ * Busca estabelecimentos por nome+UF na CNPJá paga.
+ * Cada item já vem com address/company/members (QSA) — 1 chamada = busca + enriquecimento.
+ */
+async function cnpjaSearchByName(
+  nome: string,
+  cidade?: string | null,
+  uf?: string | null,
+): Promise<any[]> {
+  if (!process.env.CNPJA_API_KEY || !nome) return [];
+  const params = new URLSearchParams();
+  params.set("names.in", nome);
+  const nUf = normalizeUf(uf ?? null);
+  if (nUf) params.set("address.state.in", nUf);
+  params.set("limit", "20");
+  try {
+    const res = await fetchWithTimeout(
+      `${CNPJA_BASE}/office?${params.toString()}`,
+      { headers: cnpjaHeaders() },
+      12000,
+    );
+    if (!res.ok) return [];
+    const json: any = await res.json();
+    const records: any[] = Array.isArray(json?.records) ? json.records
+      : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json) ? json : [];
+    if (!cidade) return records;
+    const norm = (s: string) =>
+      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const target = norm(cidade);
+    const matches = records.filter((r) => {
+      const c = norm((r?.address?.city ?? "").toString());
+      return c && (c === target || c.includes(target) || target.includes(c));
+    });
+    return matches.length ? matches : records;
+  } catch {
+    return [];
+  }
 }
 
 /** Payload open.cnpja → row parcial de lead. */
