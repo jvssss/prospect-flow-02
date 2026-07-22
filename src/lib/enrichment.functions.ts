@@ -422,9 +422,11 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
+    const hasPaid = !!process.env.CNPJA_API_KEY;
     let apiCalls = 0;
     const callCnpja = async (cnpj: string) => {
-      if (apiCalls > 0) await sleep(12500);
+      // Paga = sem throttle agressivo; open (grátis) = 5 req/min
+      if (apiCalls > 0 && !hasPaid) await sleep(12500);
       try {
         const p = await fetchCnpjaOffice(cnpj);
         apiCalls++;
@@ -455,22 +457,34 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       await supabase.from("leads").update(updates).eq("id", l.id);
       ok++;
     }
-    // 2) Leads sem CNPJ (Apify puro) → SERP + regex, depois enriquece (serial)
+    // 2) Leads sem CNPJ (Apify puro) → CNPJá search (paga) ou SERP fallback
     const { data: noCnpj } = await supabase
       .from("leads").select("id, nome_fantasia, cidade, uf")
       .is("cnpj", null).is("socios", null).limit(50);
     let matched = 0;
     for (const l of noCnpj ?? []) {
       if (!l.nome_fantasia) continue;
-      const cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
-      if (!cnpj) continue;
-      const payload = await callCnpja(cnpj);
+      let payload: any = null;
+      let cnpj: string | null = null;
+      if (hasPaid) {
+        const results = await cnpjaSearchByName(l.nome_fantasia, l.cidade as any, l.uf as any);
+        if (results.length > 0) {
+          payload = results[0];
+          cnpj = (payload?.taxId ?? "").toString().replace(/\D/g, "") || null;
+        }
+      }
+      if (!payload) {
+        cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
+        if (!cnpj) continue;
+        payload = await callCnpja(cnpj);
+      }
       const mapped = mapCnpja(payload);
       if (!mapped) {
-        await supabase.from("leads").update({ cnpj }).eq("id", l.id);
+        if (cnpj) await supabase.from("leads").update({ cnpj }).eq("id", l.id);
         continue;
       }
-      const updates: Record<string, any> = { cnpj };
+      const updates: Record<string, any> = {};
+      if (cnpj) updates.cnpj = cnpj;
       for (const [k, v] of Object.entries(mapped as any)) {
         if (v != null && v !== "") updates[k] = v;
       }
