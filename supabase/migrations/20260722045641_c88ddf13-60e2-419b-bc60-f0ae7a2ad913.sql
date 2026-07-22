@@ -1,0 +1,1 @@
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS enrichment_status text; CREATE INDEX IF NOT EXISTS leads_enrichment_status_idx ON public.leads(enrichment_status);
