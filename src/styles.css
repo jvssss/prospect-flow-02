@@ -26,8 +26,8 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Archivo Black", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Montserrat", ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -63,6 +63,8 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-surface: var(--surface);
   --color-glass: var(--glass);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-inner: var(--surface-inner);
 }
 
 :root {
@@ -71,6 +73,8 @@
   --background: oklch(0.985 0.008 250);
   --surface: oklch(0.97 0.012 250);
   --glass: oklch(1 0 0 / 0.7);
+  --surface-panel: oklch(1 0 0 / 0.55);
+  --surface-inner: oklch(1 0 0 / 0.78);
   --foreground: oklch(0.22 0.05 260);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.05 260);
@@ -92,12 +96,13 @@
   --ring: oklch(0.65 0.16 254);
   --gradient-primary: linear-gradient(135deg, var(--primary), var(--primary-glow));
   --gradient-surface: radial-gradient(1200px 600px at 10% -10%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, color-mix(in oklab, var(--primary-glow) 12%, transparent), transparent 55%);
+    radial-gradient(900px 500px at 100% 0%, color-mix(in oklab, var(--primary-glow) 14%, transparent), transparent 55%),
+    linear-gradient(180deg, oklch(0.98 0.012 250), oklch(0.955 0.02 250));
   --shadow-elegant: 0 10px 30px -12px color-mix(in oklab, var(--primary) 30%, transparent);
   --shadow-soft: 0 4px 16px -6px color-mix(in oklab, var(--primary) 18%, transparent);
-  --shadow-glass: 0 1px 0 0 rgb(255 255 255 / 0.6) inset,
-    0 20px 40px -20px color-mix(in oklab, var(--primary) 22%, transparent),
-    0 4px 12px -6px rgb(15 23 42 / 0.06);
+  --shadow-glass: 0 1px 0 0 rgb(255 255 255 / 0.7) inset,
+    0 24px 48px -24px color-mix(in oklab, var(--primary) 22%, transparent),
+    0 6px 16px -8px rgb(15 23 42 / 0.06);
   --border-subtle: oklch(0.94 0.01 250 / 0.7);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -166,18 +171,34 @@
 
   h1, h2 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
+    font-weight: 800;
   }
 }
 
 @utility font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  font-weight: 800;
 }
 
 @utility glass-card {
-  background: color-mix(in oklab, white 78%, transparent);
-  backdrop-filter: blur(20px) saturate(140%);
+  background: color-mix(in oklab, white 62%, transparent);
+  backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-glass);
+}
+
+@utility glass-panel {
+  background: color-mix(in oklab, white 55%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-glass);
+}
+
+@utility glass-inner {
+  background: color-mix(in oklab, white 82%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgb(255 255 255 / 0.7);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 4px 12px -8px rgb(15 23 42 / 0.08);
 }
