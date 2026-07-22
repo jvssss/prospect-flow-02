@@ -38,6 +38,73 @@ function sameCity(a?: string | null, b?: string | null): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+/**
+ * Conurbações conhecidas — aceitar match quando lead e CNPJ estão na mesma
+ * região metropolitana. Editável: adicionar novas listas conforme necessário.
+ * A geografia final NUNCA é sobrescrita — isso só relaxa o aceite do match.
+ */
+const CONURBATIONS: string[][] = [
+  // Vale do Aço (MG)
+  ["ipatinga", "coronel fabriciano", "timoteo", "santana do paraiso"],
+  // Grande BH
+  ["belo horizonte", "contagem", "betim", "nova lima", "santa luzia", "ribeirao das neves", "sabara", "vespasiano", "ibirite"],
+  // Grande Vitória
+  ["vitoria", "vila velha", "serra", "cariacica", "viana", "guarapari"],
+  // Grande SP + ABC
+  ["sao paulo", "guarulhos", "osasco", "santo andre", "sao bernardo do campo", "sao caetano do sul", "diadema", "maua", "ribeirao pires", "taboao da serra", "barueri", "cotia", "carapicuiba", "embu das artes", "itapecerica da serra", "suzano", "mogi das cruzes", "itaquaquecetuba"],
+  // Baixada Santista
+  ["santos", "sao vicente", "guaruja", "praia grande", "cubatao", "bertioga"],
+  // Grande Rio
+  ["rio de janeiro", "niteroi", "sao goncalo", "duque de caxias", "nova iguacu", "belford roxo", "sao joao de meriti", "nilopolis", "queimados", "mesquita", "magé", "itaguai"],
+  // RIDE-DF
+  ["brasilia", "aguas claras", "taguatinga", "ceilandia", "gama", "sobradinho", "planaltina", "samambaia", "recanto das emas", "santa maria", "riacho fundo"],
+  // Grande Curitiba
+  ["curitiba", "sao jose dos pinhais", "colombo", "pinhais", "araucaria", "fazenda rio grande"],
+  // Grande Porto Alegre
+  ["porto alegre", "canoas", "novo hamburgo", "sao leopoldo", "gravatai", "viamao", "cachoeirinha", "alvorada", "esteio", "sapucaia do sul"],
+  // Cachoeiro
+  ["cachoeiro de itapemirim", "itapemirim"],
+];
+function inSameConurbation(a: string, b: string): boolean {
+  for (const group of CONURBATIONS) {
+    if (group.includes(a) && group.includes(b)) return true;
+  }
+  return false;
+}
+/**
+ * Distância de Levenshtein normalizada (0..1). Usada como salvaguarda extra
+ * quando cidades diferem por sufixo curto (ex.: "Timóteo" vs "Timoteo Bairro").
+ */
+function levNorm(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return 1;
+  const m = a.length, n = b.length;
+  const dp = new Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n] / Math.max(m, n);
+}
+/**
+ * Aceita match quando as cidades são "a mesma" (sameCity) OU estão na mesma
+ * conurbação OU são muito parecidas (Levenshtein ≤ 0.35). Usada nos filtros
+ * de busca CNPJá. Nunca substitui a proteção do merge geográfico.
+ */
+function acceptCityMatch(leadCity?: string | null, cnpjCity?: string | null): boolean {
+  if (sameCity(leadCity, cnpjCity)) return true;
+  const a = normCity(leadCity); const b = normCity(cnpjCity);
+  if (!a || !b) return false;
+  if (inSameConurbation(a, b)) return true;
+  if (levNorm(a, b) <= 0.35) return true;
+  return false;
+}
+
 /** Extrai CEP (8 dígitos) de qualquer string. */
 function extractCep(s?: string | null): string | null {
   if (!s) return null;
