@@ -552,7 +552,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
         updates.enrichment_status = "enriched";
       }
       if (Object.keys(updates).length === 0) return;
-      await supabase.from("leads").update(updates).eq("id", leadId);
+      await supabase.from("leads").update(updates as any).eq("id", leadId);
     };
 
     // -------- 1) Leads que já têm CNPJ mas sem sócios (lookup direto) --------
