@@ -751,7 +751,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
     // Ignora leads já marcados como not_found para não gastar API repetidamente.
     const { data: noCnpj } = await supabase
       .from("leads")
-      .select("id, nome_fantasia, cidade, uf, telefone_1, telefone_2")
+      .select("id, nome_fantasia, cidade, uf, telefone_1, telefone_2, bairro, endereco")
       .is("cnpj", null).is("socios", null)
       .or("enrichment_status.is.null,enrichment_status.eq.retry")
       .limit(MAX_LEADS);
@@ -759,6 +759,8 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
     let scanned = 0;
     let matched_by_name = 0;
     let matched_by_phone = 0;
+    let matched_by_cep = 0;
+    let matched_by_district = 0;
     let matched_by_serp = 0;
     let not_found = 0;
 
@@ -766,47 +768,18 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       if (timeUp()) break;
       if (!l.nome_fantasia) continue;
       scanned++;
-      let detail: any = null;
-      let cnpj: string | null = null;
-      let strategy: "name" | "phone" | "serp" | null = null;
-
-      // 2a) CNPJá paga por variantes de nome
-      if (hasPaid) {
-        detail = await cnpjaFindByNameVariants(l.nome_fantasia, l.cidade as any, l.uf as any);
-        if (detail) {
-          cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
-          strategy = "name";
-        }
-      }
-
-      // 2b) CNPJá paga por telefone (DDD+numero)
-      if (!detail && hasPaid) {
-        for (const t of [l.telefone_1, l.telefone_2]) {
-          if (!t) continue;
-          const results = await cnpjaSearchByPhone(t as string, l.uf as any, l.cidade as any);
-          if (results.length >= 1 && results.length <= 3) {
-            detail = results[0];
-            cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
-            strategy = "phone";
-            break;
-          }
-        }
-      }
-
-      // 2c) Fallback SERP → CNPJ → detalhe
-      if (!detail) {
-        cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
-        if (cnpj) {
-          detail = await callCnpja(cnpj);
-          if (detail) strategy = "serp";
-        }
-      }
+      const found = await cascadeFindCompany(l as any);
+      const detail = found?.detail ?? null;
+      const cnpj = found?.cnpj ?? null;
+      const strategy = found?.strategy ?? null;
 
       if (detail) {
         const res = await applyUpdates(l.id, l.cidade as any, cnpj, detail);
         if (res === "applied") {
           if (strategy === "name") matched_by_name++;
           else if (strategy === "phone") matched_by_phone++;
+          else if (strategy === "cep") matched_by_cep++;
+          else if (strategy === "district") matched_by_district++;
           else if (strategy === "serp") matched_by_serp++;
         } else if (res === "rejected") {
           await supabase.from("leads")
@@ -829,12 +802,72 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       withCnpj: withCnpj?.length ?? 0,
       ok: matched_by_cnpj,
       searched: scanned,
-      matched: matched_by_name + matched_by_phone + matched_by_serp,
+      matched: matched_by_name + matched_by_phone + matched_by_cep + matched_by_district + matched_by_serp,
       matched_by_name,
       matched_by_phone,
+      matched_by_cep,
+      matched_by_district,
       matched_by_serp,
       not_found,
       elapsed_ms: Date.now() - t0,
       exhausted: timeUp(),
     };
+  });
+
+// ---------- Enriquecimento JIT (Modo Foco) ----------
+// Busca proprietário/QSA para 1 lead específico sob demanda. Retorna { ok, strategy? }.
+export const enrichLeadOnDemand = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ leadId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: lead, error } = await supabase
+      .from("leads")
+      .select("id, cnpj, nome_fantasia, cidade, uf, telefone_1, telefone_2, bairro, endereco, socios, proprietario, enrichment_status")
+      .eq("id", data.leadId).eq("user_id", userId).maybeSingle();
+    if (error) throw error;
+    if (!lead) throw new Error("Lead não encontrado");
+
+    // 1) Se já tem CNPJ, só falta QSA → lookup direto
+    if (lead.cnpj) {
+      try {
+        const payload = await fetchCnpjaOffice(lead.cnpj as string);
+        const mapped = mapCnpja(payload);
+        if (mapped) {
+          const updates: Record<string, any> = { enrichment_status: isInactivePayload(payload) ? "inactive" : "enriched" };
+          for (const [k, v] of Object.entries(mapped)) {
+            if (k === "cnpj" || k === "cidade" || k === "uf" || k === "bairro" || k === "endereco") continue;
+            if (v != null && v !== "") updates[k] = v;
+          }
+          await supabase.from("leads").update(updates as any).eq("id", lead.id);
+          return { ok: true, strategy: "cnpj" };
+        }
+      } catch { /* cai pra cascata */ }
+    }
+
+    // 2) Cascata name → phone → CEP → district → SERP
+    const found = await cascadeFindCompany(lead as any);
+    if (!found?.detail) {
+      await supabase.from("leads")
+        .update({ enrichment_status: "not_found" })
+        .eq("id", lead.id);
+      return { ok: false };
+    }
+    const mapped = mapCnpja(found.detail);
+    if (!mapped) return { ok: false };
+    // Rejeita match de outra cidade (exceto quando bateu por telefone, chave forte)
+    if (found.strategy !== "phone" && mapped.cidade && (lead as any).cidade && !sameCity(mapped.cidade, (lead as any).cidade)) {
+      await supabase.from("leads").update({ enrichment_status: "not_found" }).eq("id", lead.id);
+      return { ok: false };
+    }
+    const updates: Record<string, any> = {
+      enrichment_status: isInactivePayload(found.detail) ? "inactive" : "enriched",
+    };
+    if (found.cnpj) updates.cnpj = found.cnpj;
+    for (const [k, v] of Object.entries(mapped)) {
+      if (k === "cnpj" || k === "cidade" || k === "uf" || k === "bairro" || k === "endereco") continue;
+      if (v != null && v !== "") updates[k] = v;
+    }
+    await supabase.from("leads").update(updates as any).eq("id", lead.id);
+    return { ok: true, strategy: found.strategy };
   });
