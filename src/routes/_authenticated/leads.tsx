@@ -458,6 +458,22 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-primary/10">
               <div className="h-full bg-gradient-to-r from-primary to-[color:var(--primary-glow)] transition-all" style={{ width: `${totalProgress}%` }} />
             </div>
+            {phase === "backfill" && backfillResult && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+                <span className="font-medium text-foreground">Lote {batchNum}</span>
+                <span>· {backfillResult.processed ?? 0} / {backfillResult.initialRemaining ?? 0} processados</span>
+                <span className="text-emerald-600">✓ {backfillResult.matched}</span>
+                <span className="text-rose-600">✗ {backfillResult.not_found ?? 0}</span>
+                <span>· {backfillResult.remaining ?? 0} restam</span>
+                <button
+                  type="button"
+                  onClick={() => { cancelRef.current = true; }}
+                  className="ml-auto rounded-full border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
+                >
+                  Cancelar após o lote
+                </button>
+              </div>
+            )}
             {phase === "done" && (
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                 {created !== null && <div>✓ {created} novos leads adicionados.</div>}
@@ -477,8 +493,10 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
                     {(backfillResult.not_found ?? 0) > 0 && (
                       <div>· {backfillResult.not_found} sem match (marcados p/ pular).</div>
                     )}
-                    {backfillResult.exhausted && (
-                      <div className="text-amber-600">⏱ Tempo esgotado — rode de novo para continuar.</div>
+                    {(backfillResult.remaining ?? 0) > 0 && (
+                      <div className="text-amber-600">
+                        ⏱ {backfillResult.remaining} leads ainda pendentes — clique novamente para continuar.
+                      </div>
                     )}
                   </>
                 )}
