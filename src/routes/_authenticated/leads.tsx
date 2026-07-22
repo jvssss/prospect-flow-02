@@ -263,7 +263,11 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState<"idle" | "maps" | "cnpj" | "backfill" | "done">("idle");
   const [created, setCreated] = useState<number | null>(null);
-  const [backfillResult, setBackfillResult] = useState<{ ok: number; matched: number } | null>(null);
+  const [backfillResult, setBackfillResult] = useState<{
+    ok: number; matched: number;
+    matched_by_name?: number; matched_by_phone?: number; matched_by_serp?: number;
+    not_found?: number; exhausted?: boolean;
+  } | null>(null);
 
   const start = useServerFn(startEnrichmentJob);
   const sync = useServerFn(syncEnrichmentJob);
@@ -292,7 +296,15 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
     setPhase("backfill");
     try {
       const r: any = await backfill();
-      setBackfillResult({ ok: r?.ok ?? 0, matched: r?.matched ?? 0 });
+      setBackfillResult({
+        ok: r?.ok ?? 0,
+        matched: r?.matched ?? 0,
+        matched_by_name: r?.matched_by_name ?? 0,
+        matched_by_phone: r?.matched_by_phone ?? 0,
+        matched_by_serp: r?.matched_by_serp ?? 0,
+        not_found: r?.not_found ?? 0,
+        exhausted: !!r?.exhausted,
+      });
       onDone();
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao completar sócios");
