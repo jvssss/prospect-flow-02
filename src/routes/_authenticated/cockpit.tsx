@@ -86,6 +86,7 @@ function Cockpit() {
         .eq("is_active", true).order("updated_at", { ascending: false }).limit(1).maybeSingle();
       return data;
     },
+    staleTime: 5 * 60_000,
   });
 
   const { data: metrics } = useQuery({
@@ -265,7 +266,8 @@ function Cockpit() {
     <div className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Modo Foco</h1>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Cockpit</div>
+          <h1 className="mt-1 text-4xl tracking-tight md:text-5xl">Modo Foco</h1>
           <p className="mt-1 text-muted-foreground">{done} / {target} ligações hoje · meta: {formatBRL(nums?.monthly.revenue ?? 0)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -312,20 +314,20 @@ function Cockpit() {
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-          <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
+          <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
             <CardContent className="p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">{lead.razao_social ?? "Sem razão social"}</p>
-                  <h2 className="mt-1 text-2xl font-bold tracking-tight">{lead.nome_fantasia ?? lead.razao_social ?? "Lead"}</h2>
+                  <h2 className="mt-1 text-3xl tracking-tight">{lead.nome_fantasia ?? lead.razao_social ?? "Lead"}</h2>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                     {lead.bairro && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{lead.bairro}{lead.cidade ? ` · ${lead.cidade}` : ""}</span>}
                     {lead.capital_social ? <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Cap. {formatBRL(Number(lead.capital_social))}</span> : null}
                   </div>
                 </div>
-                <div className={`grid place-items-center rounded-2xl px-4 py-3 text-right ${overtime ? "bg-destructive/10 text-destructive" : "bg-accent text-accent-foreground"}`}>
+                <div className={`grid place-items-center rounded-2xl px-5 py-3 text-right ${overtime ? "bg-destructive/10 text-destructive" : "bg-foreground text-background"}`}>
                   <span className="text-[11px] uppercase tracking-wide">{overtime ? "Passou" : "Restante"}</span>
-                  <span className="text-3xl font-bold tabular-nums">{formatSeconds(overtime ? -remaining : remaining)}</span>
+                  <span className="font-display text-4xl tabular-nums">{formatSeconds(overtime ? -remaining : remaining)}</span>
                 </div>
               </div>
 
@@ -475,7 +477,7 @@ function Cockpit() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
+          <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
             <CardContent className="p-6">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Desfecho da ligação</p>
               <p className="mt-1 text-sm text-muted-foreground">Use as teclas <b>1–5</b> para bater ritmo.</p>
@@ -484,13 +486,13 @@ function Cockpit() {
                   <Button
                     key={o.key}
                     onClick={() => logOutcome(o.key)}
-                    className={`h-12 justify-between rounded-2xl text-left ${o.key === "meeting_scheduled" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground hover:bg-accent"}`}
+                    className={`h-12 justify-between rounded-2xl text-left ${o.key === "meeting_scheduled" ? "bg-primary text-primary-foreground shadow-[var(--shadow-elegant)]" : "bg-white/70 text-foreground hover:bg-white"}`}
                   >
                     <span className="flex items-center gap-3">
                       <o.icon className="h-4 w-4" />
                       {o.label}
                     </span>
-                    <kbd className="rounded-lg border border-border bg-background/70 px-2 py-0.5 text-xs">{o.hotkey}</kbd>
+                    <kbd className="rounded-lg border border-[color:var(--border-subtle)] bg-white px-2 py-0.5 font-mono text-xs">{o.hotkey}</kbd>
                   </Button>
                 ))}
                 <Button

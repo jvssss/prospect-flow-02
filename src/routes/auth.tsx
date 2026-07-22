@@ -69,16 +69,16 @@ function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <div className="mx-auto grid min-h-screen max-w-5xl place-items-center px-4 py-10">
-        <div className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-[var(--shadow-elegant)]">
+        <div className="w-full max-w-md rounded-3xl border border-[color:var(--border-subtle)] bg-white/75 p-8 shadow-[var(--shadow-glass)] backdrop-blur-xl">
           <Link to="/" className="mb-6 flex items-center gap-2 text-sm font-semibold">
-            <div className="grid h-9 w-9 place-items-center rounded-2xl bg-primary text-primary-foreground">
+            <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-primary to-[color:var(--primary-glow)] text-primary-foreground">
               <Target className="h-4 w-4" />
             </div>
-            Meta Prospect
+            <span className="font-display text-base">meta<span className="text-primary">prospect</span></span>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Acesse sua conta</h1>
+          <h1 className="text-3xl tracking-tight">Acesse sua conta</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Cockpit de prospecção com Números de Ouro.
           </p>

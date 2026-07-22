@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthenticatedLayout() {
   const { user } = Route.useRouteContext();
   return (
-    <div className="min-h-screen w-full bg-[oklch(0.985_0.008_250)]">
+    <div className="min-h-screen w-full">
       <TopNav user={user} />
       <main className="pb-16">
         <Outlet />

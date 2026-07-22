@@ -130,7 +130,8 @@ function LeadsPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Base</div>
+          <h1 className="mt-1 text-4xl tracking-tight md:text-5xl">Leads</h1>
           <p className="mt-1 text-muted-foreground">{leads.length} leads · fila do Modo Foco</p>
         </div>
         <div className="flex gap-2">
@@ -145,7 +146,7 @@ function LeadsPage() {
         </div>
       </div>
 
-      <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
+      <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
         <CardContent className="p-4">
           <div className="mb-3 flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-64">
