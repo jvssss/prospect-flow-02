@@ -252,138 +252,206 @@ function LeadsPage() {
   );
 }
 
-function EnrichCnpjButton({ lead }: { lead: any }) {
-  return <_EnrichCnpjButtonImpl lead={lead} />;
-}
-
-function BackfillSociosButton({ onDone }: { onDone: () => void }) {
-  const run = useServerFn(enrichMissingSocios);
-  const [loading, setLoading] = useState(false);
-  async function go() {
-    setLoading(true);
-    try {
-      const r: any = await run();
-      toast.success(`Sócios: ${r?.ok ?? 0} atualizados · ${r?.matched ?? 0} novos CNPJs encontrados`);
-      onDone();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Falha ao buscar sócios");
-    } finally { setLoading(false); }
-  }
-  return (
-    <Button variant="outline" className="rounded-2xl" onClick={go} disabled={loading}>
-      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-      Buscar sócios
-    </Button>
-  );
-}
-
-function _EnrichCnpjButtonImpl({ lead }: { lead: any }) {
-  const qc = useQueryClient();
-  const enrich = useServerFn(enrichLeadCnpj);
-  const [loading, setLoading] = useState(false);
-  if (!lead.cnpj) return null;
-  async function run() {
-    setLoading(true);
-    try {
-      await enrich({ data: { leadId: lead.id } });
-      toast.success("CNPJ enriquecido");
-      qc.invalidateQueries({ queryKey: ["leads"] });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Falha ao enriquecer");
-    } finally { setLoading(false); }
-  }
-  return (
-    <Button size="icon" variant="ghost" className="rounded-xl" title="Enriquecer CNPJ" onClick={run} disabled={loading}>
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary" />}
-    </Button>
-  );
-}
-
-function ApifyEnrichDialog({ onQueued }: { onQueued: () => void }) {
+function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"new" | "backfill">("new");
   const [city, setCity] = useState("");
   const [niche, setNiche] = useState("Autoescola");
   const [maxResults, setMaxResults] = useState(40);
   const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
   const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState<"idle" | "maps" | "cnpj" | "backfill" | "done">("idle");
   const [created, setCreated] = useState<number | null>(null);
+  const [backfillResult, setBackfillResult] = useState<{ ok: number; matched: number } | null>(null);
+
   const start = useServerFn(startEnrichmentJob);
   const sync = useServerFn(syncEnrichmentJob);
+  const backfill = useServerFn(enrichMissingSocios);
 
-  async function submit() {
-    if (!city.trim()) return toast.error("Informe a cidade");
+  // Contadores para o Modo B
+  const { data: stats } = useQuery({
+    queryKey: ["leads-backfill-stats"],
+    queryFn: async () => {
+      const [noSocios, noCnpj] = await Promise.all([
+        supabase.from("leads").select("*", { count: "exact", head: true }).is("socios", null),
+        supabase.from("leads").select("*", { count: "exact", head: true }).is("cnpj", null),
+      ]);
+      return { noSocios: noSocios.count ?? 0, noCnpj: noCnpj.count ?? 0 };
+    },
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  function reset() {
+    setJobId(null); setStatus(""); setProgress(0); setPhase("idle");
+    setCreated(null); setBackfillResult(null);
+  }
+
+  async function runBackfillPhase() {
+    setPhase("backfill");
     try {
-      const res = await start({ data: { city, niche, maxResults } });
-      setJobId(res.jobId); setStatus("running"); setProgress(10); setCreated(null);
-      toast.success("Busca iniciada no Google Maps");
+      const r: any = await backfill();
+      setBackfillResult({ ok: r?.ok ?? 0, matched: r?.matched ?? 0 });
+      onDone();
     } catch (e: any) {
-      toast.error(e?.message ?? "Falha ao iniciar");
+      toast.error(e?.message ?? "Falha ao completar sócios");
+    } finally {
+      setPhase("done");
     }
   }
 
+  async function submit() {
+    if (mode === "new") {
+      if (!city.trim()) return toast.error("Informe a cidade");
+      reset();
+      try {
+        const res = await start({ data: { city, niche, maxResults } });
+        setJobId(res.jobId); setStatus("running"); setProgress(5); setPhase("maps");
+      } catch (e: any) {
+        toast.error(e?.message ?? "Falha ao iniciar");
+        setPhase("idle");
+      }
+    } else {
+      reset();
+      await runBackfillPhase();
+    }
+  }
+
+  // Polling do job Apify+CNPJ
   useEffect(() => {
-    if (!jobId || status === "done" || status === "failed") return;
+    if (!jobId || phase !== "maps" && phase !== "cnpj") return;
+    if (status === "done" || status === "failed") return;
     const t = setInterval(async () => {
       try {
         const j: any = await sync({ data: { jobId } });
-        setStatus(j.status); setProgress(j.progress ?? 0);
+        setStatus(j.status);
+        setProgress(j.progress ?? 0);
+        if ((j.progress ?? 0) > 30) setPhase("cnpj");
         if (j.status === "done") {
           setCreated(j.leads_created ?? 0);
-          toast.success(`${j.leads_created ?? 0} leads adicionados`);
-          onQueued();
+          onDone();
+          // Fase seguinte: backfill de sócios sobre a base inteira
+          runBackfillPhase();
         } else if (j.status === "failed") {
           toast.error(j.error ?? "Falha na busca");
+          setPhase("done");
         }
       } catch (e: any) {
         toast.error(e?.message ?? "Erro ao sincronizar");
         setStatus("failed");
+        setPhase("done");
       }
     }, 4000);
     return () => clearInterval(t);
-  }, [jobId, status, sync, onQueued]);
+  }, [jobId, status, phase, sync, onDone]);
 
-  const running = jobId && status !== "done" && status !== "failed";
+  const busy = phase !== "idle" && phase !== "done";
+
+  const phaseLabel =
+    phase === "maps" ? "Buscando no Google Maps..." :
+    phase === "cnpj" ? "Enriquecendo CNPJs (open.cnpja)..." :
+    phase === "backfill" ? "Completando sócios da base..." :
+    phase === "done" ? "Concluído" : "";
+
+  const totalProgress =
+    phase === "maps" ? Math.min(45, Math.round(progress * 0.5)) :
+    phase === "cnpj" ? 45 + Math.round(Math.max(0, progress - 30) * 0.7) :
+    phase === "backfill" ? 92 :
+    phase === "done" ? 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setJobId(null); setStatus(""); setProgress(0); setCreated(null); } }}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="rounded-2xl"><Wand2 className="mr-2 h-4 w-4" /> Buscar no Google Maps</Button>
+        <Button className="rounded-2xl">
+          <Radar className="mr-2 h-4 w-4" /> Buscar leads
+        </Button>
       </DialogTrigger>
-      <DialogContent className="rounded-3xl">
-        <DialogHeader><DialogTitle>Enriquecimento por nicho + cidade</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>Nicho</Label><Input className="rounded-xl" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Autoescola" /></div>
-            <div><Label>Cidade</Label><Input className="rounded-xl" value={city} onChange={(e) => setCity(e.target.value)} placeholder="São Paulo" /></div>
-          </div>
-          <div>
-            <Label>Máx. de resultados</Label>
-            <Input type="number" min={5} max={200} className="rounded-xl" value={maxResults} onChange={(e) => setMaxResults(Number(e.target.value) || 40)} />
-          </div>
+      <DialogContent className="max-w-lg rounded-3xl">
+        <DialogHeader><DialogTitle>Buscar leads</DialogTitle></DialogHeader>
 
-          {jobId && (
-            <div className="rounded-2xl border bg-muted/40 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">
-                  {status === "done" ? "Concluído" : status === "failed" ? "Falhou" : "Buscando no Google Maps..."}
-                </span>
-                <span className="tabular-nums text-muted-foreground">{progress}%</span>
-              </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-background">
-                <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
-              </div>
-              {created !== null && <div className="mt-2 text-muted-foreground">{created} leads adicionados à sua base.</div>}
-              <p className="mt-2 text-xs text-muted-foreground">Você pode fechar esta janela — o processamento continua no servidor.</p>
-            </div>
-          )}
-
-          <Button onClick={submit} disabled={!!running} className="w-full rounded-2xl">
-            {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando…</> : "Iniciar busca"}
-          </Button>
+        {/* Seletor de modo */}
+        <div className="inline-flex w-full rounded-full border border-[color:var(--border-subtle)] bg-white/70 p-1 shadow-[var(--shadow-glass)] backdrop-blur-xl">
+          <ModePill active={mode === "new"} onClick={() => !busy && setMode("new")} icon={Building2} label="Nova cidade" />
+          <ModePill active={mode === "backfill"} onClick={() => !busy && setMode("backfill")} icon={Users2} label="Completar base" />
         </div>
+
+        {mode === "new" ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Nicho</Label><Input className="rounded-xl" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Autoescola" disabled={busy} /></div>
+              <div><Label>Cidade</Label><Input className="rounded-xl" value={city} onChange={(e) => setCity(e.target.value)} placeholder="São Paulo" disabled={busy} /></div>
+            </div>
+            <div>
+              <Label>Máx. de resultados</Label>
+              <Input type="number" min={5} max={200} className="rounded-xl" value={maxResults}
+                onChange={(e) => setMaxResults(Number(e.target.value) || 40)} disabled={busy} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Busca no Google Maps → descobre CNPJ → puxa QSA, capital e e-mails no open.cnpja → completa sócios que ainda faltam na base.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-primary/5 p-4 text-sm">
+            <div className="font-semibold">Vamos completar o que já está no banco</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <StatChip label="Sem sócios" value={stats?.noSocios ?? "—"} />
+              <StatChip label="Sem CNPJ" value={stats?.noCnpj ?? "—"} />
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Vamos varrer os leads sem sócios, tentar descobrir o CNPJ e puxar QSA + capital via open.cnpja. Sem novos leads.
+            </p>
+          </div>
+        )}
+
+        {phase !== "idle" && (
+          <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-white/70 p-3 text-sm shadow-[var(--shadow-glass)] backdrop-blur-xl">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">{phaseLabel}</span>
+              <span className="tabular-nums text-muted-foreground">{totalProgress}%</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-primary/10">
+              <div className="h-full bg-gradient-to-r from-primary to-[color:var(--primary-glow)] transition-all" style={{ width: `${totalProgress}%` }} />
+            </div>
+            {phase === "done" && (
+              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                {created !== null && <div>✓ {created} novos leads adicionados.</div>}
+                {backfillResult && <div>✓ Sócios: {backfillResult.ok} atualizados · {backfillResult.matched} novos CNPJs descobertos.</div>}
+              </div>
+            )}
+            {busy && (
+              <p className="mt-2 text-xs text-muted-foreground">Pode fechar esta janela — o processamento continua no servidor.</p>
+            )}
+          </div>
+        )}
+
+        <Button onClick={submit} disabled={busy} className="w-full rounded-2xl">
+          {busy
+            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando…</>
+            : mode === "new" ? <><Radar className="mr-2 h-4 w-4" /> Iniciar busca</> : <><Users2 className="mr-2 h-4 w-4" /> Completar base</>}
+        </Button>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ModePill({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
+  return (
+    <button onClick={onClick}
+      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+        active ? "bg-foreground text-background shadow-[var(--shadow-soft)]" : "text-muted-foreground hover:text-foreground"
+      }`}>
+      <Icon className="h-4 w-4" /> {label}
+    </button>
+  );
+}
+
+function StatChip({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-[color:var(--border-subtle)] bg-white/60 px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="text-lg font-bold tabular-nums">{value}</div>
+    </div>
   );
 }
 
