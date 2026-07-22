@@ -362,33 +362,36 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
     // Passo 2/3: pipeline serial — descobrir CNPJ (SERP + regex) e enriquecer em open.cnpja
     // respeitando 5 req/min (12,5s entre chamadas). Falha silenciosa por lead.
     const enrichedRows: typeof baseRows = [];
-    let cnpjaCalls = 0;
     const total = baseRows.length;
+    const hasPaid = !!process.env.CNPJA_API_KEY;
     for (let i = 0; i < total; i++) {
       const row = baseRows[i];
       try {
-        const cnpj = await findCnpjByText(row.nome_fantasia!, row.cidade);
-        if (cnpj) {
-          if (cnpjaCalls > 0) await sleep(12500);
-          try {
-            const detail = await fetchCnpjaOffice(cnpj);
-            cnpjaCalls++;
-            enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj }, detail));
-          } catch (e) {
-            if (e instanceof RateLimitError) {
-              // aguarda janela e tenta 1x mais
-              await sleep(12500);
-              try {
-                const detail = await fetchCnpjaOffice(cnpj);
-                cnpjaCalls++;
-                enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj }, detail));
-              } catch {
-                enrichedRows.push({ ...row, cnpj });
-              }
-            } else {
-              enrichedRows.push({ ...row, cnpj });
+        let detail: any = null;
+        let cnpj: string | null = null;
+        // 1) Preferido: CNPJá paga (busca + QSA em 1 chamada)
+        if (hasPaid) {
+          const results = await cnpjaSearchByName(row.nome_fantasia!, row.cidade, row.uf);
+          if (results.length > 0) {
+            detail = results[0];
+            cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
+          }
+        }
+        // 2) Fallback: DuckDuckGo + lookup direto
+        if (!detail) {
+          cnpj = await findCnpjByText(row.nome_fantasia!, row.cidade);
+          if (cnpj) {
+            try {
+              detail = await fetchCnpjaOffice(cnpj);
+            } catch (e) {
+              if (e instanceof RateLimitError) await sleep(12500);
             }
           }
+        }
+        if (detail) {
+          enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj: cnpj ?? row.cnpj }, detail));
+        } else if (cnpj) {
+          enrichedRows.push({ ...row, cnpj });
         } else {
           enrichedRows.push(row);
         }
