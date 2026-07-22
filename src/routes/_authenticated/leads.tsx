@@ -262,6 +262,7 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState<"idle" | "maps" | "cnpj" | "backfill" | "done">("idle");
   const [created, setCreated] = useState<number | null>(null);
+  const [batchNum, setBatchNum] = useState(0);
   const [backfillResult, setBackfillResult] = useState<{
     ok: number; matched: number;
     matched_by_name?: number; matched_by_phone?: number;
@@ -288,25 +289,37 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
 
   function reset() {
     setJobId(null); setStatus(""); setProgress(0); setPhase("idle");
-    setCreated(null); setBackfillResult(null);
+    setCreated(null); setBackfillResult(null); setBatchNum(0);
   }
 
   async function runBackfillPhase() {
     setPhase("backfill");
+    const acc = {
+      ok: 0, matched: 0,
+      matched_by_name: 0, matched_by_phone: 0,
+      matched_by_cep: 0, matched_by_district: 0, matched_by_serp: 0,
+      not_found: 0, exhausted: false,
+    };
     try {
-      const r: any = await backfill();
-      setBackfillResult({
-        ok: r?.ok ?? 0,
-        matched: r?.matched ?? 0,
-        matched_by_name: r?.matched_by_name ?? 0,
-        matched_by_phone: r?.matched_by_phone ?? 0,
-        matched_by_cep: r?.matched_by_cep ?? 0,
-        matched_by_district: r?.matched_by_district ?? 0,
-        matched_by_serp: r?.matched_by_serp ?? 0,
-        not_found: r?.not_found ?? 0,
-        exhausted: !!r?.exhausted,
-      });
-      onDone();
+      // Loop de lotes: chama enquanto houver progresso e o servidor sinalizar
+      // tempo esgotado. Para na primeira rodada sem match/not_found.
+      for (let i = 0; i < 20; i++) {
+        setBatchNum(i + 1);
+        const r: any = await backfill();
+        acc.ok += r?.ok ?? 0;
+        acc.matched += r?.matched ?? 0;
+        acc.matched_by_name += r?.matched_by_name ?? 0;
+        acc.matched_by_phone += r?.matched_by_phone ?? 0;
+        acc.matched_by_cep += r?.matched_by_cep ?? 0;
+        acc.matched_by_district += r?.matched_by_district ?? 0;
+        acc.matched_by_serp += r?.matched_by_serp ?? 0;
+        acc.not_found += r?.not_found ?? 0;
+        acc.exhausted = !!r?.exhausted;
+        setBackfillResult({ ...acc });
+        onDone();
+        const progressed = (r?.matched ?? 0) + (r?.not_found ?? 0) + (r?.ok ?? 0);
+        if (!r?.exhausted || progressed === 0) break;
+      }
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao completar sócios");
     } finally {
@@ -365,7 +378,7 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const phaseLabel =
     phase === "maps" ? "Buscando no Google Maps..." :
     phase === "cnpj" ? "Cruzando com Receita (CNPJá)..." :
-    phase === "backfill" ? "Completando proprietários da base..." :
+    phase === "backfill" ? `Completando proprietários da base${batchNum > 0 ? ` (lote ${batchNum})` : ""}...` :
     phase === "done" ? "Concluído" : "";
 
   const totalProgress =
