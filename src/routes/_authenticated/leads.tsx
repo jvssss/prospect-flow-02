@@ -12,9 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Search, Plus, Trash2, Sparkles, Wand2, Loader2 } from "lucide-react";
+import { Upload, Search, Plus, Trash2, Loader2, Radar, Building2, Users2 } from "lucide-react";
 import { formatBRL, formatPhoneBR, onlyDigits } from "@/lib/goldenMath";
-import { enrichLeadCnpj, enrichMissingSocios, startEnrichmentJob, syncEnrichmentJob } from "@/lib/enrichment.functions";
+import { enrichMissingSocios, startEnrichmentJob, syncEnrichmentJob } from "@/lib/enrichment.functions";
 
 export const Route = createFileRoute("/_authenticated/leads")({
   head: () => ({
@@ -134,9 +134,8 @@ function LeadsPage() {
           <h1 className="mt-1 text-4xl tracking-tight md:text-5xl">Leads</h1>
           <p className="mt-1 text-muted-foreground">{leads.length} leads · fila do Modo Foco</p>
         </div>
-        <div className="flex gap-2">
-          <ApifyEnrichDialog onQueued={() => qc.invalidateQueries({ queryKey: ["leads"] })} />
-          <BackfillSociosButton onDone={() => qc.invalidateQueries({ queryKey: ["leads"] })} />
+        <div className="flex flex-wrap gap-2">
+          <LeadFetchButton onDone={() => qc.invalidateQueries({ queryKey: ["leads"] })} />
           <Button variant="outline" className="rounded-2xl" onClick={() => fileRef.current?.click()}>
             <Upload className="mr-2 h-4 w-4" /> Importar CSV
           </Button>
@@ -235,7 +234,6 @@ function LeadsPage() {
                     <TableCell className="tabular-nums">{l.google_reviews ?? "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="rounded-full">{l.status}</Badge></TableCell>
                     <TableCell className="text-right">
-                      <EnrichCnpjButton lead={l} />
                       <Button size="icon" variant="ghost" className="rounded-xl" onClick={() => del.mutate(l.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
