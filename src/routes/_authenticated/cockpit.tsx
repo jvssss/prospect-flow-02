@@ -393,6 +393,16 @@ function Cockpit() {
                       : [];
                     const prop = lead.proprietario as string | null;
                     if (!prop && nomes.length === 0) {
+                      if (jitLoading) {
+                        return (
+                          <p className="mt-2 inline-flex items-center gap-2 text-sm italic text-primary">
+                            <Sparkles className="h-3.5 w-3.5 animate-pulse" /> Buscando proprietário na Receita…
+                          </p>
+                        );
+                      }
+                      if (lead.enrichment_status === "inactive") {
+                        return <p className="mt-2 text-sm italic text-rose-600">CNPJ inativo/baixado — pule este lead.</p>;
+                      }
                       return <p className="mt-2 text-sm italic text-muted-foreground">Não temos o nome do proprietário/sócios deste lead.</p>;
                     }
                     return (
