@@ -38,6 +38,30 @@ function sameCity(a?: string | null, b?: string | null): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+/** Extrai CEP (8 dígitos) de qualquer string. */
+function extractCep(s?: string | null): string | null {
+  if (!s) return null;
+  const m = String(s).match(/\b\d{5}-?\d{3}\b/);
+  if (!m) return null;
+  const d = m[0].replace(/\D/g, "");
+  return d.length === 8 ? d : null;
+}
+/** Normaliza telefone BR: remove +/0/55 do começo. Devolve DDD+número (10-11 dígitos) ou null. */
+function normalizeBrPhone(s?: string | null): string | null {
+  if (!s) return null;
+  let d = String(s).replace(/\D/g, "");
+  if (d.startsWith("55") && d.length >= 12) d = d.slice(2);
+  if (d.startsWith("0") && d.length >= 11) d = d.slice(1);
+  if (d.length < 10 || d.length > 11) return null;
+  return d;
+}
+/** True se o payload da CNPJá indicar CNPJ inativo (Baixada/Inapta/Suspensa/Nula). */
+function isInactivePayload(p: any): boolean {
+  const txt = (p?.status?.text ?? p?.company?.status?.text ?? "").toString().toLowerCase();
+  if (!txt) return false;
+  return /baixad|inapt|suspens|nula/.test(txt);
+}
+
 // ---------- helpers ----------
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -219,8 +243,8 @@ async function cnpjaSearchByPhone(
   cidade?: string | null,
 ): Promise<any[]> {
   if (!process.env.CNPJA_API_KEY || !phone) return [];
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 10) return [];
+  const digits = normalizeBrPhone(phone);
+  if (!digits) return [];
   const params = new URLSearchParams();
   params.set("phones.in", digits);
   const nUf = normalizeUf(uf ?? null);
@@ -237,12 +261,153 @@ async function cnpjaSearchByPhone(
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
-    // Só aceita se bater com a cidade alvo (DDD compartilhado cobre várias cidades).
+    // Telefone é uma chave forte: se retorna 1 único registro, aceita mesmo fora da cidade
+    // (DDD compartilhado às vezes mostra cidade vizinha). Se retornar 2+, filtra por cidade.
+    if (!cidade || records.length <= 1) return records;
+    const filtered = records.filter((r) => sameCity(r?.address?.city, cidade));
+    return filtered.length > 0 ? filtered : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Busca por CEP — chave altamente específica quando o nome é ruidoso. */
+async function cnpjaSearchByPostal(
+  cep: string,
+  cidade?: string | null,
+): Promise<any[]> {
+  if (!process.env.CNPJA_API_KEY || !cep) return [];
+  const d = cep.replace(/\D/g, "");
+  if (d.length !== 8) return [];
+  const params = new URLSearchParams();
+  params.set("address.postal.in", d);
+  params.set("limit", "20");
+  try {
+    const res = await fetchWithTimeout(
+      `${CNPJA_BASE}/office?${params.toString()}`,
+      { headers: cnpjaHeaders() },
+      12000,
+    );
+    if (!res.ok) return [];
+    const json: any = await res.json();
+    const records: any[] = Array.isArray(json?.records) ? json.records
+      : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json) ? json : [];
     if (!cidade) return records;
     return records.filter((r) => sameCity(r?.address?.city, cidade));
   } catch {
     return [];
   }
+}
+
+/** Busca por bairro + primeira palavra significativa do nome. */
+async function cnpjaSearchByDistrict(
+  nomeFragmento: string,
+  bairro: string,
+  cidade?: string | null,
+  uf?: string | null,
+): Promise<any[]> {
+  if (!process.env.CNPJA_API_KEY || !nomeFragmento || !bairro) return [];
+  const params = new URLSearchParams();
+  params.set("names.in", cleanName(nomeFragmento));
+  params.set("address.district.in", cleanName(bairro));
+  const nUf = normalizeUf(uf ?? null);
+  if (nUf) params.set("address.state.in", nUf);
+  params.set("limit", "10");
+  try {
+    const res = await fetchWithTimeout(
+      `${CNPJA_BASE}/office?${params.toString()}`,
+      { headers: cnpjaHeaders() },
+      12000,
+    );
+    if (!res.ok) return [];
+    const json: any = await res.json();
+    const records: any[] = Array.isArray(json?.records) ? json.records
+      : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json) ? json : [];
+    if (!cidade) return records;
+    return records.filter((r) => sameCity(r?.address?.city, cidade));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Cascata completa: name → phone → CEP → district → SERP.
+ * Retorna { detail, cnpj, strategy } ou null. Compartilhada por ingest e JIT.
+ */
+async function cascadeFindCompany(row: {
+  nome_fantasia?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  bairro?: string | null;
+  endereco?: string | null;
+  telefone_1?: string | null;
+  telefone_2?: string | null;
+}): Promise<{ detail: any; cnpj: string | null; strategy: "name" | "phone" | "cep" | "district" | "serp" } | null> {
+  const hasPaid = !!process.env.CNPJA_API_KEY;
+  const nome = row.nome_fantasia ?? "";
+  const cidade = row.cidade ?? null;
+  const uf = row.uf ?? null;
+
+  // 1) Nome + variantes
+  if (hasPaid && nome) {
+    const d = await cnpjaFindByNameVariants(nome, cidade, uf);
+    if (d) return { detail: d, cnpj: (d?.taxId ?? "").toString().replace(/\D/g, "") || null, strategy: "name" };
+  }
+  // 2) Telefones
+  if (hasPaid) {
+    for (const t of [row.telefone_1, row.telefone_2]) {
+      if (!t) continue;
+      const results = await cnpjaSearchByPhone(t as string, uf, cidade);
+      if (results.length >= 1 && results.length <= 3) {
+        const d = results[0];
+        return { detail: d, cnpj: (d?.taxId ?? "").toString().replace(/\D/g, "") || null, strategy: "phone" };
+      }
+    }
+  }
+  // 3) CEP
+  if (hasPaid) {
+    const cep = extractCep(row.endereco) ?? extractCep(row.bairro);
+    if (cep) {
+      const results = await cnpjaSearchByPostal(cep, cidade);
+      // se poucos resultados, tenta casar por primeira palavra do nome; senão pega o único
+      if (results.length === 1) {
+        const d = results[0];
+        return { detail: d, cnpj: (d?.taxId ?? "").toString().replace(/\D/g, "") || null, strategy: "cep" };
+      }
+      if (results.length > 1 && nome) {
+        const first = cleanName(nome).split(/\s+/)[0]?.toLowerCase();
+        const hit = results.find((r: any) => {
+          const rn = ((r?.company?.name ?? r?.alias ?? "") + "").toLowerCase();
+          return first && rn.includes(first);
+        });
+        if (hit) return { detail: hit, cnpj: (hit?.taxId ?? "").toString().replace(/\D/g, "") || null, strategy: "cep" };
+      }
+    }
+  }
+  // 4) Bairro + fragmento de nome
+  if (hasPaid && row.bairro && nome) {
+    const first = cleanName(nome).split(/\s+/).find((w) => w.length >= 4);
+    if (first) {
+      const results = await cnpjaSearchByDistrict(first, row.bairro, cidade, uf);
+      if (results.length >= 1 && results.length <= 3) {
+        const d = results[0];
+        return { detail: d, cnpj: (d?.taxId ?? "").toString().replace(/\D/g, "") || null, strategy: "district" };
+      }
+    }
+  }
+  // 5) SERP fallback
+  if (nome) {
+    const cnpj = await findCnpjByText(nome, cidade);
+    if (cnpj) {
+      try {
+        const d = await fetchCnpjaOffice(cnpj);
+        if (d) return { detail: d, cnpj, strategy: "serp" };
+      } catch { /* ignore */ }
+    }
+  }
+  return null;
 }
 
 /** Tenta várias variantes de nome no CNPJá até casar dentro da cidade. */
