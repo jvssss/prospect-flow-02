@@ -935,7 +935,7 @@ export const enrichLeadOnDemand = createServerFn({ method: "POST" })
     const mapped = mapCnpja(found.detail);
     if (!mapped) return { ok: false };
     // Rejeita match de outra cidade (exceto quando bateu por telefone, chave forte)
-    if (found.strategy !== "phone" && mapped.cidade && (lead as any).cidade && !sameCity(mapped.cidade, (lead as any).cidade)) {
+    if (found.strategy !== "phone" && mapped.cidade && (lead as any).cidade && !acceptCityMatch((lead as any).cidade, mapped.cidade)) {
       await supabase.from("leads").update({ enrichment_status: "not_found" }).eq("id", lead.id);
       return { ok: false };
     }
