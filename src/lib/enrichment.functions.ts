@@ -158,6 +158,96 @@ async function cnpjaSearchByName(
   }
 }
 
+// -------- Normalização + variantes de nome para busca CNPJá --------
+function stripDiacritics(s: string) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+function cleanName(s: string) {
+  return stripDiacritics(s)
+    // remove emojis / símbolos
+    .replace(/[\p{Extended_Pictographic}\u2600-\u27BF]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+/** Gera variantes de nome, do mais específico ao mais genérico. */
+function nameCandidates(raw: string, cidade?: string | null): string[] {
+  const seen = new Set<string>();
+  const push = (v: string) => {
+    const cleaned = cleanName(v);
+    if (cleaned && cleaned.length >= 4 && !seen.has(cleaned.toLowerCase())) {
+      seen.add(cleaned.toLowerCase());
+    }
+  };
+  const base = cleanName(raw);
+  push(base);
+  // corta em separadores
+  const cuts = base.split(/[|\-–—•/,()]/).map((s) => s.trim()).filter(Boolean);
+  for (const c of cuts) push(c);
+  // remove cidade no final
+  if (cidade) {
+    const city = cleanName(cidade);
+    const re = new RegExp(`\\b${city.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "gi");
+    push(base.replace(re, ""));
+    for (const c of cuts) push(c.replace(re, ""));
+  }
+  // sinônimos comuns do nicho
+  const swaps: [RegExp, string][] = [
+    [/\bcfc\b/gi, "Centro de Formação de Condutores"],
+    [/\bcentro de formacao de condutores\b/gi, "CFC"],
+    [/\bauto\s+escola\b/gi, "Autoescola"],
+    [/\bautoescola\b/gi, "Auto Escola"],
+  ];
+  const swapped = new Set<string>(Array.from(seen));
+  for (const s of Array.from(swapped)) {
+    for (const [re, out] of swaps) {
+      if (re.test(s)) push(s.replace(re, out));
+    }
+  }
+  // ordena: mais longas primeiro (mais específicas)
+  return Array.from(seen).sort((a, b) => b.length - a.length);
+}
+
+/** Busca por telefone (DDD+numero). Aceita se retornar poucos registros na mesma UF. */
+async function cnpjaSearchByPhone(phone: string, uf?: string | null): Promise<any[]> {
+  if (!process.env.CNPJA_API_KEY || !phone) return [];
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10) return [];
+  const params = new URLSearchParams();
+  params.set("phones.in", digits);
+  const nUf = normalizeUf(uf ?? null);
+  if (nUf) params.set("address.state.in", nUf);
+  params.set("limit", "5");
+  try {
+    const res = await fetchWithTimeout(
+      `${CNPJA_BASE}/office?${params.toString()}`,
+      { headers: cnpjaHeaders() },
+      12000,
+    );
+    if (!res.ok) return [];
+    const json: any = await res.json();
+    const records: any[] = Array.isArray(json?.records) ? json.records
+      : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json) ? json : [];
+    return records;
+  } catch {
+    return [];
+  }
+}
+
+/** Tenta várias variantes de nome no CNPJá até casar dentro da cidade. */
+async function cnpjaFindByNameVariants(
+  nome: string,
+  cidade?: string | null,
+  uf?: string | null,
+): Promise<any | null> {
+  const cands = nameCandidates(nome, cidade);
+  for (const cand of cands) {
+    const results = await cnpjaSearchByName(cand, cidade, uf);
+    if (results.length > 0) return results[0];
+  }
+  return null;
+}
+
 /** Payload open.cnpja → row parcial de lead. */
 function mapCnpja(p: any) {
   if (!p) return null;
@@ -444,52 +534,121 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       }
     };
 
-    // 1) Leads que já têm CNPJ mas sem sócios → busca detalhe direto (serial)
-    const { data: withCnpj } = await supabase
-      .from("leads").select("id, cnpj")
-      .not("cnpj", "is", null).is("socios", null).limit(50);
-    let ok = 0;
-    for (const l of withCnpj ?? []) {
-      const payload = await callCnpja(l.cnpj as string);
-      const mapped = mapCnpja(payload);
-      if (!mapped) continue;
-      const { cnpj: _c, ...updates } = mapped as any;
-      await supabase.from("leads").update(updates).eq("id", l.id);
-      ok++;
-    }
-    // 2) Leads sem CNPJ (Apify puro) → CNPJá search (paga) ou SERP fallback
-    const { data: noCnpj } = await supabase
-      .from("leads").select("id, nome_fantasia, cidade, uf")
-      .is("cnpj", null).is("socios", null).limit(50);
-    let matched = 0;
-    for (const l of noCnpj ?? []) {
-      if (!l.nome_fantasia) continue;
-      let payload: any = null;
-      let cnpj: string | null = null;
-      if (hasPaid) {
-        const results = await cnpjaSearchByName(l.nome_fantasia, l.cidade as any, l.uf as any);
-        if (results.length > 0) {
-          payload = results[0];
-          cnpj = (payload?.taxId ?? "").toString().replace(/\D/g, "") || null;
-        }
-      }
-      if (!payload) {
-        cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
-        if (!cnpj) continue;
-        payload = await callCnpja(cnpj);
-      }
-      const mapped = mapCnpja(payload);
-      if (!mapped) {
-        if (cnpj) await supabase.from("leads").update({ cnpj }).eq("id", l.id);
-        continue;
-      }
+    // Orçamento de tempo (Worker ~90s). Sai limpo antes de estourar.
+    const t0 = Date.now();
+    const TIME_BUDGET_MS = 85_000;
+    const MAX_LEADS = 300;
+    const timeUp = () => Date.now() - t0 > TIME_BUDGET_MS;
+
+    const applyUpdates = async (leadId: string, cnpj: string | null, detail: any | null) => {
+      const mapped = detail ? mapCnpja(detail) : null;
       const updates: Record<string, any> = {};
       if (cnpj) updates.cnpj = cnpj;
-      for (const [k, v] of Object.entries(mapped as any)) {
-        if (v != null && v !== "") updates[k] = v;
+      if (mapped) {
+        for (const [k, v] of Object.entries(mapped as any)) {
+          if (k === "cnpj") continue;
+          if (v != null && v !== "") updates[k] = v;
+        }
+        updates.enrichment_status = "enriched";
       }
-      await supabase.from("leads").update(updates as any).eq("id", l.id);
-      matched++;
+      if (Object.keys(updates).length === 0) return;
+      await supabase.from("leads").update(updates as any).eq("id", leadId);
+    };
+
+    // -------- 1) Leads que já têm CNPJ mas sem sócios (lookup direto) --------
+    const { data: withCnpj } = await supabase
+      .from("leads").select("id, cnpj")
+      .not("cnpj", "is", null).is("socios", null).limit(MAX_LEADS);
+    let matched_by_cnpj = 0;
+    for (const l of withCnpj ?? []) {
+      if (timeUp()) break;
+      const payload = await callCnpja(l.cnpj as string);
+      if (!payload) continue;
+      await applyUpdates(l.id, null, payload);
+      matched_by_cnpj++;
     }
-    return { withCnpj: withCnpj?.length ?? 0, ok, searched: noCnpj?.length ?? 0, matched };
+
+    // -------- 2) Leads sem CNPJ: variantes de nome → telefone → SERP --------
+    // Ignora leads já marcados como not_found para não gastar API repetidamente.
+    const { data: noCnpj } = await supabase
+      .from("leads")
+      .select("id, nome_fantasia, cidade, uf, telefone_1, telefone_2")
+      .is("cnpj", null).is("socios", null)
+      .or("enrichment_status.is.null,enrichment_status.eq.retry")
+      .limit(MAX_LEADS);
+
+    let scanned = 0;
+    let matched_by_name = 0;
+    let matched_by_phone = 0;
+    let matched_by_serp = 0;
+    let not_found = 0;
+
+    for (const l of noCnpj ?? []) {
+      if (timeUp()) break;
+      if (!l.nome_fantasia) continue;
+      scanned++;
+      let detail: any = null;
+      let cnpj: string | null = null;
+      let strategy: "name" | "phone" | "serp" | null = null;
+
+      // 2a) CNPJá paga por variantes de nome
+      if (hasPaid) {
+        detail = await cnpjaFindByNameVariants(l.nome_fantasia, l.cidade as any, l.uf as any);
+        if (detail) {
+          cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
+          strategy = "name";
+        }
+      }
+
+      // 2b) CNPJá paga por telefone (DDD+numero)
+      if (!detail && hasPaid) {
+        for (const t of [l.telefone_1, l.telefone_2]) {
+          if (!t) continue;
+          const results = await cnpjaSearchByPhone(t as string, l.uf as any);
+          if (results.length >= 1 && results.length <= 3) {
+            detail = results[0];
+            cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
+            strategy = "phone";
+            break;
+          }
+        }
+      }
+
+      // 2c) Fallback SERP → CNPJ → detalhe
+      if (!detail) {
+        cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
+        if (cnpj) {
+          detail = await callCnpja(cnpj);
+          if (detail) strategy = "serp";
+        }
+      }
+
+      if (detail) {
+        await applyUpdates(l.id, cnpj, detail);
+        if (strategy === "name") matched_by_name++;
+        else if (strategy === "phone") matched_by_phone++;
+        else if (strategy === "serp") matched_by_serp++;
+      } else if (cnpj) {
+        // achou CNPJ mas não conseguiu detalhe — persiste ao menos o CNPJ
+        await supabase.from("leads").update({ cnpj }).eq("id", l.id);
+      } else {
+        await supabase.from("leads")
+          .update({ enrichment_status: "not_found" })
+          .eq("id", l.id);
+        not_found++;
+      }
+    }
+
+    return {
+      withCnpj: withCnpj?.length ?? 0,
+      ok: matched_by_cnpj,
+      searched: scanned,
+      matched: matched_by_name + matched_by_phone + matched_by_serp,
+      matched_by_name,
+      matched_by_phone,
+      matched_by_serp,
+      not_found,
+      elapsed_ms: Date.now() - t0,
+      exhausted: timeUp(),
+    };
   });
