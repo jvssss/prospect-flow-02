@@ -91,11 +91,12 @@ function GoalsPage() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Números de Ouro</h1>
-        <p className="mt-1 text-muted-foreground">Sua meta, seu funil, seu tempo → o que fazer hoje.</p>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Configuração</div>
+        <h1 className="mt-1 text-4xl tracking-tight md:text-5xl">Números de Ouro</h1>
+        <p className="mt-2 text-muted-foreground">Sua meta, seu funil, seu tempo → o que fazer hoje.</p>
       </div>
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-        <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
+        <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
           <CardHeader><CardTitle>Sua realidade</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">

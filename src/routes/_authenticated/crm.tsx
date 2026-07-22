@@ -35,6 +35,7 @@ function CrmPage() {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 60_000,
   });
 
   const filtered = useMemo(() => {
@@ -50,10 +51,10 @@ function CrmPage() {
     <div className="mx-auto max-w-[1500px] px-6 pt-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-widest text-primary">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
             {board === "sdr" ? "Tela do SDR" : "Tela do Closer"}
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="mt-1 text-4xl tracking-tight md:text-5xl">
             {board === "sdr" ? "Prospecção de leads" : "Fechamento de vendas"}
           </h1>
           <p className="mt-1 text-muted-foreground">
@@ -61,7 +62,7 @@ function CrmPage() {
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 shadow-[var(--shadow-soft)]">
+        <div className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-subtle)] bg-white/70 p-1 shadow-[var(--shadow-glass)] backdrop-blur-xl">
           <PillBtn active={board === "sdr"} onClick={() => setBoard("sdr")} icon={Users} label="SDR" />
           <PillBtn active={board === "closer"} onClick={() => setBoard("closer")} icon={Trophy} label="Closer" />
         </div>
@@ -82,7 +83,7 @@ function PillBtn({ active, onClick, icon: Icon, label }: any) {
   return (
     <button onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition ${
-        active ? "bg-primary text-primary-foreground shadow-[var(--shadow-soft)]" : "text-muted-foreground hover:text-foreground"
+        active ? "bg-foreground text-background shadow-[var(--shadow-soft)]" : "text-muted-foreground hover:text-foreground"
       }`}>
       <Icon className="h-4 w-4" /> {label}
     </button>
@@ -246,7 +247,7 @@ function Kpi({ label, value, sub, icon: Icon, tone }: any) {
 
 function Column({ icon: Icon, label, count, accent, bar, children }: any) {
   return (
-    <div className="flex flex-col rounded-3xl border border-border bg-card p-3 shadow-[var(--shadow-soft)]">
+    <div className="flex flex-col rounded-3xl border border-[color:var(--border-subtle)] bg-white/60 p-3 shadow-[var(--shadow-glass)] backdrop-blur-xl">
       <div className="px-2 pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

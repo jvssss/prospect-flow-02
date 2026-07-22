@@ -25,13 +25,13 @@ function Index() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-2 font-semibold">
-          <div className="grid h-9 w-9 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-elegant)]">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-primary to-[color:var(--primary-glow)] text-primary-foreground shadow-[var(--shadow-elegant)]">
             <Target className="h-4 w-4" />
           </div>
-          <span className="text-lg tracking-tight">Meta Prospect</span>
+          <span className="font-display text-xl tracking-tight">meta<span className="text-primary">prospect</span></span>
         </div>
         <Button asChild variant="outline" className="rounded-2xl">
           <Link to="/auth">Entrar</Link>
@@ -40,10 +40,10 @@ function Index() {
 
       <main className="mx-auto max-w-6xl px-6 pb-24 pt-10 md:pt-20">
         <section className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center rounded-full border border-border bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+          <span className="inline-flex items-center rounded-full border border-[color:var(--border-subtle)] bg-white/70 px-3 py-1 text-xs font-medium text-secondary-foreground shadow-[var(--shadow-glass)] backdrop-blur-xl">
             Matemática do Faturamento · Marcus Vinícius
           </span>
-          <h1 className="mt-6 text-4xl font-bold tracking-tight text-foreground md:text-6xl">
+          <h1 className="mt-6 text-5xl tracking-tight text-foreground md:text-7xl">
             Bata sua meta com <span className="text-primary">clareza matemática</span>.
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-muted-foreground md:text-xl">
@@ -66,11 +66,11 @@ function Index() {
             { icon: Gauge, title: "Modo Foco", body: "Um lead por vez, timer regressivo, hotkeys 1-5 e ritmo gamificado." },
             { icon: LayoutDashboard, title: "Diário de Bordo", body: "Conversão real vs. estimada e sugestão de recalibração." },
           ].map((f) => (
-            <div key={f.title} className="rounded-3xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
+            <div key={f.title} className="rounded-3xl border border-[color:var(--border-subtle)] bg-white/70 p-6 shadow-[var(--shadow-glass)] backdrop-blur-xl">
               <div className="grid h-11 w-11 place-items-center rounded-2xl bg-accent text-primary">
                 <f.icon className="h-5 w-5" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
+              <h3 className="mt-4 text-xl font-semibold tracking-tight">{f.title}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
             </div>
           ))}

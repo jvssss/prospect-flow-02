@@ -64,8 +64,9 @@ function DiarioPage() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Diário de Bordo</h1>
-        <p className="mt-1 text-muted-foreground">Últimos 30 dias · realidade vs. estimativa</p>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Feedback loop</div>
+        <h1 className="mt-1 text-4xl tracking-tight md:text-5xl">Diário de Bordo</h1>
+        <p className="mt-2 text-muted-foreground">Últimos 30 dias · realidade vs. estimativa</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -77,7 +78,7 @@ function DiarioPage() {
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
+        <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
           <CardHeader><CardTitle>Ajuste fino do funil</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <Compare label="Ligação → Decisor" est={goal ? Number(goal.rate_call_to_decision) : 0} real={realCallToDec} />
@@ -91,7 +92,7 @@ function DiarioPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border-border shadow-[var(--shadow-soft)]">
+        <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
           <CardHeader><CardTitle>Últimos dias</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             {metrics.length === 0 && <p className="text-muted-foreground">Ainda sem registros. Vá para o Modo Foco e comece.</p>}
