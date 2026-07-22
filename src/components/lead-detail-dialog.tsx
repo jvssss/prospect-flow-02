@@ -1,11 +1,16 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPhoneBR } from "@/lib/goldenMath";
+import { enrichLeadCnpj } from "@/lib/enrichment.functions";
 import {
-  MapPin, User, Phone, Building2, Calendar, Sparkles, AlertTriangle, ArrowRight,
+  MapPin, User, Phone, Building2, Calendar, Sparkles, AlertTriangle, ArrowRight, RefreshCw, Loader2,
   MessageSquare, Target as TargetIcon, DollarSign, Users2,
 } from "lucide-react";
 
@@ -46,6 +51,7 @@ export function LeadDetailDialog({ lead, open, onOpenChange }: { lead: any | nul
                 <Button size="sm" variant="outline" className="rounded-full">Abrir Closer <ArrowRight className="ml-1 h-3.5 w-3.5" /></Button>
               </Link>
             )}
+            {lead.cnpj && <ReEnrichButton leadId={lead.id} />}
           </div>
         </div>
 
@@ -165,4 +171,27 @@ function labelMeetingStatus(s?: string | null) {
 function sociosString(v: any) {
   if (!Array.isArray(v)) return "";
   return v.map((s) => s?.nome || s?.nome_socio).filter(Boolean).join(", ");
+}
+
+function ReEnrichButton({ leadId }: { leadId: string }) {
+  const qc = useQueryClient();
+  const enrich = useServerFn(enrichLeadCnpj);
+  const [loading, setLoading] = useState(false);
+  async function run() {
+    setLoading(true);
+    try {
+      await enrich({ data: { leadId } });
+      toast.success("CNPJ re-enriquecido");
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["crm-leads"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao re-enriquecer");
+    } finally { setLoading(false); }
+  }
+  return (
+    <Button size="sm" variant="outline" className="rounded-full" onClick={run} disabled={loading}>
+      {loading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+      Re-enriquecer CNPJ
+    </Button>
+  );
 }
