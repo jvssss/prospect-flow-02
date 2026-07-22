@@ -4,8 +4,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 // =====================================================================
 // CNPJ enrichment
-//   - Etapa B: Descobridor de CNPJ (DuckDuckGo HTML + regex)
-//   - Etapa C: open.cnpja.com/office/{cnpj}  (5 req/min → fila serial c/ 12,5s)
+//   - Etapa B: Busca por nome+UF via api.cnpja.com/office (já retorna QSA)
+//   - Etapa C: api.cnpja.com/office/{cnpj} para lookup direto por CNPJ
+//   - Fallback: DuckDuckGo HTML + open.cnpja.com se a paga falhar
 // =====================================================================
 
 const UF_MAP: Record<string, string> = {
@@ -87,23 +88,74 @@ async function findCnpjByText(nome: string, cidade?: string | null): Promise<str
   }
 }
 
+const CNPJA_BASE = "https://api.cnpja.com";
+const CNPJA_OPEN_BASE = "https://open.cnpja.com";
+
+function cnpjaHeaders(): Record<string, string> {
+  const key = process.env.CNPJA_API_KEY;
+  const h: Record<string, string> = { accept: "application/json", "user-agent": BROWSER_UA };
+  if (key) h["Authorization"] = key;
+  return h;
+}
+
 /** Sinal ao orquestrador de que precisamos aguardar (429). */
 class RateLimitError extends Error {
   constructor() { super("open.cnpja rate limited"); }
 }
 
-/** GET open.cnpja.com/office/{cnpj} — retorna payload cru ou lança. */
+/** GET /office/{cnpj} — usa api.cnpja.com se CNPJA_API_KEY setada, senão open.cnpja. */
 async function fetchCnpjaOffice(cnpj: string): Promise<any> {
   const clean = cnpj.replace(/\D/g, "");
   if (clean.length !== 14) throw new Error("CNPJ inválido");
+  const base = process.env.CNPJA_API_KEY ? CNPJA_BASE : CNPJA_OPEN_BASE;
   const res = await fetchWithTimeout(
-    `https://open.cnpja.com/office/${clean}`,
-    { headers: { accept: "application/json", "user-agent": BROWSER_UA } },
-    10000,
+    `${base}/office/${clean}`,
+    { headers: cnpjaHeaders() },
+    12000,
   );
   if (res.status === 429) throw new RateLimitError();
-  if (!res.ok) throw new Error(`open.cnpja ${res.status}`);
+  if (!res.ok) throw new Error(`cnpja ${res.status}`);
   return res.json();
+}
+
+/**
+ * Busca estabelecimentos por nome+UF na CNPJá paga.
+ * Cada item já vem com address/company/members (QSA) — 1 chamada = busca + enriquecimento.
+ */
+async function cnpjaSearchByName(
+  nome: string,
+  cidade?: string | null,
+  uf?: string | null,
+): Promise<any[]> {
+  if (!process.env.CNPJA_API_KEY || !nome) return [];
+  const params = new URLSearchParams();
+  params.set("names.in", nome);
+  const nUf = normalizeUf(uf ?? null);
+  if (nUf) params.set("address.state.in", nUf);
+  params.set("limit", "20");
+  try {
+    const res = await fetchWithTimeout(
+      `${CNPJA_BASE}/office?${params.toString()}`,
+      { headers: cnpjaHeaders() },
+      12000,
+    );
+    if (!res.ok) return [];
+    const json: any = await res.json();
+    const records: any[] = Array.isArray(json?.records) ? json.records
+      : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json) ? json : [];
+    if (!cidade) return records;
+    const norm = (s: string) =>
+      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const target = norm(cidade);
+    const matches = records.filter((r) => {
+      const c = norm((r?.address?.city ?? "").toString());
+      return c && (c === target || c.includes(target) || target.includes(c));
+    });
+    return matches.length ? matches : records;
+  } catch {
+    return [];
+  }
 }
 
 /** Payload open.cnpja → row parcial de lead. */
@@ -310,33 +362,36 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
     // Passo 2/3: pipeline serial — descobrir CNPJ (SERP + regex) e enriquecer em open.cnpja
     // respeitando 5 req/min (12,5s entre chamadas). Falha silenciosa por lead.
     const enrichedRows: typeof baseRows = [];
-    let cnpjaCalls = 0;
     const total = baseRows.length;
+    const hasPaid = !!process.env.CNPJA_API_KEY;
     for (let i = 0; i < total; i++) {
       const row = baseRows[i];
       try {
-        const cnpj = await findCnpjByText(row.nome_fantasia!, row.cidade);
-        if (cnpj) {
-          if (cnpjaCalls > 0) await sleep(12500);
-          try {
-            const detail = await fetchCnpjaOffice(cnpj);
-            cnpjaCalls++;
-            enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj }, detail));
-          } catch (e) {
-            if (e instanceof RateLimitError) {
-              // aguarda janela e tenta 1x mais
-              await sleep(12500);
-              try {
-                const detail = await fetchCnpjaOffice(cnpj);
-                cnpjaCalls++;
-                enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj }, detail));
-              } catch {
-                enrichedRows.push({ ...row, cnpj });
-              }
-            } else {
-              enrichedRows.push({ ...row, cnpj });
+        let detail: any = null;
+        let cnpj: string | null = null;
+        // 1) Preferido: CNPJá paga (busca + QSA em 1 chamada)
+        if (hasPaid) {
+          const results = await cnpjaSearchByName(row.nome_fantasia!, row.cidade, row.uf);
+          if (results.length > 0) {
+            detail = results[0];
+            cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
+          }
+        }
+        // 2) Fallback: DuckDuckGo + lookup direto
+        if (!detail) {
+          cnpj = await findCnpjByText(row.nome_fantasia!, row.cidade);
+          if (cnpj) {
+            try {
+              detail = await fetchCnpjaOffice(cnpj);
+            } catch (e) {
+              if (e instanceof RateLimitError) await sleep(12500);
             }
           }
+        }
+        if (detail) {
+          enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj: cnpj ?? row.cnpj }, detail));
+        } else if (cnpj) {
+          enrichedRows.push({ ...row, cnpj });
         } else {
           enrichedRows.push(row);
         }
@@ -367,9 +422,11 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
+    const hasPaid = !!process.env.CNPJA_API_KEY;
     let apiCalls = 0;
     const callCnpja = async (cnpj: string) => {
-      if (apiCalls > 0) await sleep(12500);
+      // Paga = sem throttle agressivo; open (grátis) = 5 req/min
+      if (apiCalls > 0 && !hasPaid) await sleep(12500);
       try {
         const p = await fetchCnpjaOffice(cnpj);
         apiCalls++;
@@ -400,22 +457,34 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       await supabase.from("leads").update(updates).eq("id", l.id);
       ok++;
     }
-    // 2) Leads sem CNPJ (Apify puro) → SERP + regex, depois enriquece (serial)
+    // 2) Leads sem CNPJ (Apify puro) → CNPJá search (paga) ou SERP fallback
     const { data: noCnpj } = await supabase
       .from("leads").select("id, nome_fantasia, cidade, uf")
       .is("cnpj", null).is("socios", null).limit(50);
     let matched = 0;
     for (const l of noCnpj ?? []) {
       if (!l.nome_fantasia) continue;
-      const cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
-      if (!cnpj) continue;
-      const payload = await callCnpja(cnpj);
+      let payload: any = null;
+      let cnpj: string | null = null;
+      if (hasPaid) {
+        const results = await cnpjaSearchByName(l.nome_fantasia, l.cidade as any, l.uf as any);
+        if (results.length > 0) {
+          payload = results[0];
+          cnpj = (payload?.taxId ?? "").toString().replace(/\D/g, "") || null;
+        }
+      }
+      if (!payload) {
+        cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
+        if (!cnpj) continue;
+        payload = await callCnpja(cnpj);
+      }
       const mapped = mapCnpja(payload);
       if (!mapped) {
-        await supabase.from("leads").update({ cnpj }).eq("id", l.id);
+        if (cnpj) await supabase.from("leads").update({ cnpj }).eq("id", l.id);
         continue;
       }
-      const updates: Record<string, any> = { cnpj };
+      const updates: Record<string, any> = {};
+      if (cnpj) updates.cnpj = cnpj;
       for (const [k, v] of Object.entries(mapped as any)) {
         if (v != null && v !== "") updates[k] = v;
       }
