@@ -268,7 +268,9 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
     matched_by_name?: number; matched_by_phone?: number;
     matched_by_cep?: number; matched_by_district?: number; matched_by_serp?: number;
     not_found?: number; exhausted?: boolean;
+    processed?: number; remaining?: number; initialRemaining?: number;
   } | null>(null);
+  const cancelRef = useRef(false);
 
   const start = useServerFn(startEnrichmentJob);
   const sync = useServerFn(syncEnrichmentJob);
@@ -290,6 +292,7 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   function reset() {
     setJobId(null); setStatus(""); setProgress(0); setPhase("idle");
     setCreated(null); setBackfillResult(null); setBatchNum(0);
+    cancelRef.current = false;
   }
 
   async function runBackfillPhase() {
@@ -299,11 +302,11 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
       matched_by_name: 0, matched_by_phone: 0,
       matched_by_cep: 0, matched_by_district: 0, matched_by_serp: 0,
       not_found: 0, exhausted: false,
+      processed: 0, remaining: 0, initialRemaining: 0,
     };
     try {
-      // Loop de lotes: chama enquanto houver progresso e o servidor sinalizar
-      // tempo esgotado. Para na primeira rodada sem match/not_found.
       for (let i = 0; i < 20; i++) {
+        if (cancelRef.current) break;
         setBatchNum(i + 1);
         const r: any = await backfill();
         acc.ok += r?.ok ?? 0;
@@ -314,11 +317,16 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
         acc.matched_by_district += r?.matched_by_district ?? 0;
         acc.matched_by_serp += r?.matched_by_serp ?? 0;
         acc.not_found += r?.not_found ?? 0;
+        acc.processed += r?.processed ?? 0;
+        acc.remaining = r?.remaining ?? 0;
+        if (i === 0) acc.initialRemaining = (r?.processed ?? 0) + (r?.remaining ?? 0);
         acc.exhausted = !!r?.exhausted;
         setBackfillResult({ ...acc });
         onDone();
-        const progressed = (r?.matched ?? 0) + (r?.not_found ?? 0) + (r?.ok ?? 0);
-        if (!r?.exhausted || progressed === 0) break;
+        // Continua enquanto o lote leu algo. Só para quando não há mais o
+        // que processar (processed=0) — não olha só "updated" porque um lote
+        // inteiro de not_found também precisa avançar para o próximo.
+        if ((r?.processed ?? 0) === 0 || (r?.remaining ?? 0) === 0) break;
       }
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao completar sócios");
@@ -381,10 +389,17 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
     phase === "backfill" ? `Completando proprietários da base${batchNum > 0 ? ` (lote ${batchNum})` : ""}...` :
     phase === "done" ? "Concluído" : "";
 
+  // Progresso real durante o backfill: processados / total_inicial
+  const backfillPct = (() => {
+    if (!backfillResult) return 0;
+    const total = backfillResult.initialRemaining ?? 0;
+    if (total <= 0) return phase === "done" ? 100 : 5;
+    return Math.min(99, Math.round(((backfillResult.processed ?? 0) / total) * 100));
+  })();
   const totalProgress =
     phase === "maps" ? Math.min(45, Math.round(progress * 0.5)) :
     phase === "cnpj" ? 45 + Math.round(Math.max(0, progress - 30) * 0.7) :
-    phase === "backfill" ? 92 :
+    phase === "backfill" ? backfillPct :
     phase === "done" ? 100 : 0;
 
   return (
