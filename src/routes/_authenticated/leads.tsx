@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Search, Plus, Trash2, Loader2, Radar, Building2, Users2 } from "lucide-react";
+import { Upload, Search, Plus, Trash2, Loader2, Radar, Users2, Sparkles } from "lucide-react";
 import { formatBRL, formatPhoneBR, onlyDigits } from "@/lib/goldenMath";
 import { enrichMissingSocios, startEnrichmentJob, syncEnrichmentJob } from "@/lib/enrichment.functions";
 
@@ -254,7 +254,6 @@ function LeadsPage() {
 
 function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"new" | "backfill">("new");
   const [city, setCity] = useState("");
   const [niche, setNiche] = useState("Autoescola");
   const [maxResults, setMaxResults] = useState(40);
@@ -265,7 +264,8 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const [created, setCreated] = useState<number | null>(null);
   const [backfillResult, setBackfillResult] = useState<{
     ok: number; matched: number;
-    matched_by_name?: number; matched_by_phone?: number; matched_by_serp?: number;
+    matched_by_name?: number; matched_by_phone?: number;
+    matched_by_cep?: number; matched_by_district?: number; matched_by_serp?: number;
     not_found?: number; exhausted?: boolean;
   } | null>(null);
 
@@ -273,7 +273,6 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const sync = useServerFn(syncEnrichmentJob);
   const backfill = useServerFn(enrichMissingSocios);
 
-  // Contadores para o Modo B
   const { data: stats } = useQuery({
     queryKey: ["leads-backfill-stats"],
     queryFn: async () => {
@@ -301,6 +300,8 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
         matched: r?.matched ?? 0,
         matched_by_name: r?.matched_by_name ?? 0,
         matched_by_phone: r?.matched_by_phone ?? 0,
+        matched_by_cep: r?.matched_by_cep ?? 0,
+        matched_by_district: r?.matched_by_district ?? 0,
         matched_by_serp: r?.matched_by_serp ?? 0,
         not_found: r?.not_found ?? 0,
         exhausted: !!r?.exhausted,
@@ -314,8 +315,9 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   }
 
   async function submit() {
-    if (mode === "new") {
-      if (!city.trim()) return toast.error("Informe a cidade");
+    const hasCity = city.trim().length > 0;
+    reset();
+    if (hasCity) {
       reset();
       try {
         const res = await start({ data: { city, niche, maxResults } });
@@ -325,7 +327,7 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
         setPhase("idle");
       }
     } else {
-      reset();
+      // Sem cidade → só backfill da base existente
       await runBackfillPhase();
     }
   }
@@ -362,8 +364,8 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
 
   const phaseLabel =
     phase === "maps" ? "Buscando no Google Maps..." :
-    phase === "cnpj" ? "Enriquecendo CNPJs (open.cnpja)..." :
-    phase === "backfill" ? "Completando sócios da base..." :
+    phase === "cnpj" ? "Cruzando com Receita (CNPJá)..." :
+    phase === "backfill" ? "Completando proprietários da base..." :
     phase === "done" ? "Concluído" : "";
 
   const totalProgress =
@@ -380,41 +382,44 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg rounded-3xl">
-        <DialogHeader><DialogTitle>Buscar leads</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Buscar leads</DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Um clique só: Google Maps encontra quem está operando → CNPJá cruza para trazer proprietário, QSA e capital → completa a base antiga automaticamente no final.
+          </p>
+        </DialogHeader>
 
-        {/* Seletor de modo */}
-        <div className="inline-flex w-full rounded-full border border-[color:var(--border-subtle)] bg-white/70 p-1 shadow-[var(--shadow-glass)] backdrop-blur-xl">
-          <ModePill active={mode === "new"} onClick={() => !busy && setMode("new")} icon={Building2} label="Nova cidade" />
-          <ModePill active={mode === "backfill"} onClick={() => !busy && setMode("backfill")} icon={Users2} label="Completar base" />
-        </div>
-
-        {mode === "new" ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Nicho</Label><Input className="rounded-xl" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Autoescola" disabled={busy} /></div>
-              <div><Label>Cidade</Label><Input className="rounded-xl" value={city} onChange={(e) => setCity(e.target.value)} placeholder="São Paulo" disabled={busy} /></div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Nicho</Label>
+              <Input className="rounded-xl" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Autoescola" disabled={busy} />
             </div>
             <div>
-              <Label>Máx. de resultados</Label>
-              <Input type="number" min={5} max={200} className="rounded-xl" value={maxResults}
-                onChange={(e) => setMaxResults(Number(e.target.value) || 40)} disabled={busy} />
+              <Label>Cidade <span className="text-[10px] font-normal text-muted-foreground">(opcional)</span></Label>
+              <Input className="rounded-xl" value={city} onChange={(e) => setCity(e.target.value)} placeholder="São Paulo" disabled={busy} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Busca no Google Maps → descobre CNPJ → puxa QSA, capital e e-mails no open.cnpja → completa sócios que ainda faltam na base.
-            </p>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-primary/5 p-4 text-sm">
-            <div className="font-semibold">Vamos completar o que já está no banco</div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <StatChip label="Sem sócios" value={stats?.noSocios ?? "—"} />
+          <div>
+            <Label>Máx. de resultados</Label>
+            <Input type="number" min={5} max={200} className="rounded-xl" value={maxResults}
+              onChange={(e) => setMaxResults(Number(e.target.value) || 40)} disabled={busy || !city.trim()} />
+          </div>
+          <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-primary/5 p-3 text-xs">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-primary">
+              <Sparkles className="h-3.5 w-3.5" /> Base atual
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <StatChip label="Sem proprietário" value={stats?.noSocios ?? "—"} />
               <StatChip label="Sem CNPJ" value={stats?.noCnpj ?? "—"} />
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Vamos varrer os leads sem sócios, tentar descobrir o CNPJ e puxar QSA + capital via open.cnpja. Sem novos leads.
+            <p className="mt-2 text-muted-foreground">
+              {city.trim()
+                ? `Vai buscar novos leads em "${city.trim()}" e depois varrer os ${stats?.noSocios ?? "?"} leads sem proprietário.`
+                : "Deixe a cidade em branco para apenas completar a base existente."}
             </p>
           </div>
-        )}
+        </div>
 
         {phase !== "idle" && (
           <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-white/70 p-3 text-sm shadow-[var(--shadow-glass)] backdrop-blur-xl">
@@ -432,10 +437,12 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
                   <>
                     <div>✓ {backfillResult.ok} leads com CNPJ receberam QSA.</div>
                     <div>
-                      ✓ {backfillResult.matched} novos CNPJs descobertos
+                      ✓ {backfillResult.matched} proprietários descobertos
                       {" ("}
                       nome: {backfillResult.matched_by_name ?? 0}
                       {" · "}telefone: {backfillResult.matched_by_phone ?? 0}
+                      {" · "}CEP: {backfillResult.matched_by_cep ?? 0}
+                      {" · "}bairro: {backfillResult.matched_by_district ?? 0}
                       {" · "}busca: {backfillResult.matched_by_serp ?? 0}
                       {")"}
                     </div>
@@ -458,21 +465,12 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
         <Button onClick={submit} disabled={busy} className="w-full rounded-2xl">
           {busy
             ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando…</>
-            : mode === "new" ? <><Radar className="mr-2 h-4 w-4" /> Iniciar busca</> : <><Users2 className="mr-2 h-4 w-4" /> Completar base</>}
+            : city.trim()
+              ? <><Radar className="mr-2 h-4 w-4" /> Buscar e enriquecer tudo</>
+              : <><Users2 className="mr-2 h-4 w-4" /> Completar base existente</>}
         </Button>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ModePill({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
-  return (
-    <button onClick={onClick}
-      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
-        active ? "bg-foreground text-background shadow-[var(--shadow-soft)]" : "text-muted-foreground hover:text-foreground"
-      }`}>
-      <Icon className="h-4 w-4" /> {label}
-    </button>
   );
 }
 

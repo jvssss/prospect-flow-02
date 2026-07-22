@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { enrichLeadOnDemand } from "@/lib/enrichment.functions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
-  Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned,
+  Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned, Sparkles,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -164,6 +166,25 @@ function Cockpit() {
   const [callNotes, setCallNotes] = useState("");
   const [followupAt, setFollowupAt] = useState("");
   const [followupNotes, setFollowupNotes] = useState("");
+
+  // JIT: enriquece o lead atual se faltar proprietário/sócios
+  const enrichNow = useServerFn(enrichLeadOnDemand);
+  const [jitLoading, setJitLoading] = useState(false);
+  const jitTried = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!lead?.id) return;
+    const socios = Array.isArray(lead.socios) ? (lead.socios as any[]) : [];
+    const hasOwner = !!lead.proprietario || socios.length > 0;
+    const skip = lead.enrichment_status === "not_found" || lead.enrichment_status === "inactive";
+    if (hasOwner || skip) return;
+    if (jitTried.current.has(lead.id)) return;
+    jitTried.current.add(lead.id);
+    setJitLoading(true);
+    enrichNow({ data: { leadId: lead.id } })
+      .then(() => { refetchQueue(); })
+      .catch(() => {})
+      .finally(() => setJitLoading(false));
+  }, [lead?.id, lead?.proprietario, lead?.socios, lead?.enrichment_status, enrichNow, refetchQueue]);
 
   // reset campos ao trocar de lead
   useEffect(() => {
@@ -372,6 +393,16 @@ function Cockpit() {
                       : [];
                     const prop = lead.proprietario as string | null;
                     if (!prop && nomes.length === 0) {
+                      if (jitLoading) {
+                        return (
+                          <p className="mt-2 inline-flex items-center gap-2 text-sm italic text-primary">
+                            <Sparkles className="h-3.5 w-3.5 animate-pulse" /> Buscando proprietário na Receita…
+                          </p>
+                        );
+                      }
+                      if (lead.enrichment_status === "inactive") {
+                        return <p className="mt-2 text-sm italic text-rose-600">CNPJ inativo/baixado — pule este lead.</p>;
+                      }
                       return <p className="mt-2 text-sm italic text-muted-foreground">Não temos o nome do proprietário/sócios deste lead.</p>;
                     }
                     return (
