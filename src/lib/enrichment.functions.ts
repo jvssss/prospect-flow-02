@@ -774,7 +774,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       detail: any | null,
     ): Promise<"applied" | "rejected" | "noop"> => {
       const mapped = detail ? mapCnpja(detail) : null;
-      if (mapped && mapped.cidade && leadCidade && !sameCity(mapped.cidade, leadCidade)) {
+      if (mapped && mapped.cidade && leadCidade && !acceptCityMatch(leadCidade, mapped.cidade)) {
         return "rejected";
       }
       const updates: Record<string, any> = {};
@@ -784,7 +784,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
           if (k === "cnpj" || GEO_FIELDS.has(k)) continue;
           if (v != null && v !== "") updates[k] = v;
         }
-        updates.enrichment_status = "enriched";
+        updates.enrichment_status = isInactivePayload(detail) ? "inactive" : "enriched";
       }
       if (Object.keys(updates).length === 0) return "noop";
       await supabase.from("leads").update(updates as any).eq("id", leadId);
@@ -864,6 +864,16 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
     });
     await Promise.all(workers);
 
+    // Quantos leads ainda restam para próximos lotes (mesma seleção da fila)
+    const { count: remainingCount } = await supabase
+      .from("leads").select("*", { count: "exact", head: true })
+      .is("cnpj", null).is("socios", null)
+      .or("enrichment_status.is.null,enrichment_status.eq.retry");
+
+    let inactive = 0;
+    // conta rápida dos que viraram inactive nesse lote não é necessária;
+    // preferimos expor o total geral pela UI ao invés de derivar aqui.
+
     return {
       withCnpj: withCnpj?.length ?? 0,
       ok: matched_by_cnpj,
@@ -875,6 +885,9 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       matched_by_district,
       matched_by_serp,
       not_found,
+      processed: scanned,
+      remaining: remainingCount ?? 0,
+      inactive,
       elapsed_ms: Date.now() - t0,
       exhausted: timeUp(),
     };
