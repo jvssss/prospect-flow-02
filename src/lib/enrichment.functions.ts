@@ -248,7 +248,7 @@ async function cnpjaSearchByName(
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
     // Estrito: se nada bate na cidade alvo, descarta (evita casar homônimo em outra cidade).
-    return records.filter((r) => sameCity(r?.address?.city, cidade));
+    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
   } catch {
     return [];
   }
@@ -275,15 +275,23 @@ function nameCandidates(raw: string, cidade?: string | null): string[] {
     }
   };
   const base = cleanName(raw);
-  push(base);
-  // corta em separadores
-  const cuts = base.split(/[|\-–—•/,()]/).map((s) => s.trim()).filter(Boolean);
+  // Remove "(Cidade-UF)" ou "(Cidade)" no final
+  const baseNoParens = base.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+  push(baseNoParens);
+  // Antes de tudo, pega o que vem ANTES do primeiro separador " | ", " - ", " – "
+  const beforeSep = baseNoParens.split(/\s+[|\-–—]\s+/)[0]?.trim();
+  if (beforeSep) push(beforeSep);
+  // corta em separadores (mais agressivo)
+  const cuts = baseNoParens.split(/[|\-–—•/,()]/).map((s) => s.trim()).filter(Boolean);
   for (const c of cuts) push(c);
+  // Remove sufixos comuns de bairro/rótulo que aparecem depois de "- "
+  const suffixStrip = beforeSep ?? baseNoParens;
+  push(suffixStrip.replace(/\b(centro|matriz|filial|unidade|sede|bairro)\b.*$/gi, "").trim());
   // remove cidade no final
   if (cidade) {
     const city = cleanName(cidade);
     const re = new RegExp(`\\b${city.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "gi");
-    push(base.replace(re, ""));
+    push(baseNoParens.replace(re, ""));
     for (const c of cuts) push(c.replace(re, ""));
   }
   // sinônimos comuns do nicho
@@ -330,8 +338,8 @@ async function cnpjaSearchByPhone(
       : Array.isArray(json) ? json : [];
     // Telefone é uma chave forte: se retorna 1 único registro, aceita mesmo fora da cidade
     // (DDD compartilhado às vezes mostra cidade vizinha). Se retornar 2+, filtra por cidade.
-    if (!cidade || records.length <= 1) return records;
-    const filtered = records.filter((r) => sameCity(r?.address?.city, cidade));
+  if (!cidade || records.length <= 1) return records;
+      const filtered = records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
     return filtered.length > 0 ? filtered : [];
   } catch {
     return [];
@@ -361,7 +369,7 @@ async function cnpjaSearchByPostal(
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
-    return records.filter((r) => sameCity(r?.address?.city, cidade));
+    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
   } catch {
     return [];
   }
@@ -393,7 +401,7 @@ async function cnpjaSearchByDistrict(
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
-    return records.filter((r) => sameCity(r?.address?.city, cidade));
+    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
   } catch {
     return [];
   }
