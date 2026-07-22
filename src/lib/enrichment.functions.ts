@@ -635,6 +635,14 @@ export const startEnrichmentJob = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
+    // Limpa jobs órfãos (running > 10 min sem update) do próprio usuário.
+    const staleCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+    await supabase.from("enrichment_jobs")
+      .update({ status: "failed", error: "abandoned (stale)" })
+      .eq("user_id", userId)
+      .in("status", ["queued", "running"])
+      .lt("updated_at", staleCutoff);
+
     const { data: job, error: jerr } = await supabase.from("enrichment_jobs").insert({
       user_id: userId, city: data.city, niche: data.niche, status: "queued", progress: 0,
     }).select("id").single();
