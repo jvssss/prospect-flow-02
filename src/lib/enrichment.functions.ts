@@ -637,35 +637,17 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       cnpj: null as string | null,
     })).filter((r) => r.nome_fantasia);
 
-    // Passo 2/3: pipeline serial — descobrir CNPJ (SERP + regex) e enriquecer em open.cnpja
-    // respeitando 5 req/min (12,5s entre chamadas). Falha silenciosa por lead.
-    const enrichedRows: typeof baseRows = [];
-    const total = baseRows.length;
-    for (let i = 0; i < total; i++) {
-      const row = baseRows[i];
-      try {
-        const found = await cascadeFindCompany(row as any);
-        if (found?.detail) {
-          enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj: found.cnpj ?? row.cnpj }, found.detail));
-        } else if (found?.cnpj) {
-          enrichedRows.push({ ...row, cnpj: found.cnpj });
-        } else {
-          enrichedRows.push(row);
-        }
-      } catch {
-        enrichedRows.push(row);
-      }
-      // progresso incremental 30 → 95
-      const progress = 30 + Math.floor(((i + 1) / total) * 65);
-      await supabase.from("enrichment_jobs").update({ progress }).eq("id", job.id);
-    }
+    // Ingest rápido: insere apenas os dados do Google Maps. O enriquecimento
+    // (CNPJá + QSA) roda depois em `enrichMissingSocios`, com concorrência,
+    // para não estourar o orçamento do Worker (~90s) durante o ingest.
+    await supabase.from("enrichment_jobs").update({ progress: 90 }).eq("id", job.id);
 
     let created = 0;
-    if (enrichedRows.length) {
+    if (baseRows.length) {
       const { data: inserted, error: iErr } = await supabase
-        .from("leads").insert(enrichedRows).select("id");
+        .from("leads").insert(baseRows).select("id");
       if (iErr && !String(iErr.message).includes("duplicate")) throw iErr;
-      created = inserted?.length ?? enrichedRows.length;
+      created = inserted?.length ?? baseRows.length;
     }
 
     await supabase.from("enrichment_jobs")
