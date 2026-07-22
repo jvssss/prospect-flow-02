@@ -478,9 +478,11 @@ function mergeCnpjaOntoRow<T extends Record<string, any>>(row: T, detail: any): 
       ([k, v]) => v != null && v !== "" && !GEO_FIELDS.has(k),
     ),
   );
+  const inactive = isInactivePayload(detail);
   return {
     ...row,
     ...clean,
+    enrichment_status: inactive ? "inactive" : "enriched",
     website: (row as any).website ?? null,
     google_rating: (row as any).google_rating,
     google_reviews: (row as any).google_reviews,
