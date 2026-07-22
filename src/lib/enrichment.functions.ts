@@ -4,11 +4,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 // =====================================================================
 // CNPJ enrichment
-//   - Primary: CNPJ.biz (search by name+cidade+uf, detail with QSA)
-//   - Fallback: publica.cnpj.ws (grátis, quando já temos CNPJ)
+//   - Etapa B: Descobridor de CNPJ (DuckDuckGo HTML + regex)
+//   - Etapa C: open.cnpja.com/office/{cnpj}  (5 req/min → fila serial c/ 12,5s)
 // =====================================================================
-
-const CNPJ_BIZ_BASE = "https://cnpj.biz/api/v2";
 
 const UF_MAP: Record<string, string> = {
   acre: "AC", alagoas: "AL", amapa: "AP", "amapá": "AP", amazonas: "AM",
@@ -28,142 +26,138 @@ function normalizeUf(v?: string | null): string | null {
   return UF_MAP[s.toLowerCase()] ?? null;
 }
 
-async function cnpjBizPost(path: string, body: unknown) {
-  const token = process.env.CNPJ_BIZ_TOKEN;
-  if (!token) throw new Error("CNPJ_BIZ_TOKEN não configurado");
-  const res = await fetch(`${CNPJ_BIZ_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json",
-      authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`cnpj.biz ${path} ${res.status}`);
-  return res.json();
+// ---------- helpers ----------
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 10000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
 }
 
-/** Busca CNPJ.biz por nome fantasia + cidade/UF; retorna primeiro payload completo ou null. */
-async function cnpjBizSearchByName(name: string, cidade?: string | null, uf?: string | null) {
-  if (!name) return null;
-  const clean = name.replace(/[^\p{L}\p{N}\s&-]/gu, "").trim();
-  if (!clean) return null;
-  const ufSigla = normalizeUf(uf);
-  const localidades: any[] = [];
-  if (cidade && ufSigla) localidades.push({ tipo: "cidade", cidade, estado: ufSigla, pais: "BR" });
-  else if (ufSigla) localidades.push({ tipo: "estado", estado: ufSigla, pais: "BR" });
+/** Valida dígitos verificadores do CNPJ. */
+function isValidCnpj(raw: string): boolean {
+  const c = raw.replace(/\D/g, "");
+  if (c.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(c)) return false;
+  const calc = (base: string) => {
+    const w = base.length === 12
+      ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+      : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum = 0;
+    for (let i = 0; i < base.length; i++) sum += parseInt(base[i], 10) * w[i];
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  const d1 = calc(c.slice(0, 12));
+  const d2 = calc(c.slice(0, 12) + d1);
+  return d1 === parseInt(c[12], 10) && d2 === parseInt(c[13], 10);
+}
+
+const CNPJ_REGEX = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g;
+
+/** Descobridor de CNPJ: busca "{nome} {cidade} CNPJ" no DuckDuckGo HTML e aplica regex. */
+async function findCnpjByText(nome: string, cidade?: string | null): Promise<string | null> {
+  if (!nome) return null;
+  const q = `${nome} ${cidade ?? ""} CNPJ`.trim();
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
   try {
-    const rows = await cnpjBizPost("/empresas/listar-com-dados", {
-      razao_fantasia: [clean],
-      localidades,
-      limit: 3,
-      offset: 0,
-    });
-    if (!Array.isArray(rows) || rows.length === 0) return null;
-    return rows[0];
+    const res = await fetchWithTimeout(
+      url,
+      { headers: { "user-agent": BROWSER_UA, accept: "text/html" } },
+      8000,
+    );
+    if (!res.ok) return null;
+    const html = await res.text();
+    const matches = html.match(CNPJ_REGEX) ?? [];
+    for (const m of matches) {
+      const digits = m.replace(/\D/g, "");
+      if (isValidCnpj(digits)) return digits;
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-/** Detalhe completo por CNPJ (inclui QSA/socios). */
-async function cnpjBizFetchDetail(cnpj: string) {
+/** Sinal ao orquestrador de que precisamos aguardar (429). */
+class RateLimitError extends Error {
+  constructor() { super("open.cnpja rate limited"); }
+}
+
+/** GET open.cnpja.com/office/{cnpj} — retorna payload cru ou lança. */
+async function fetchCnpjaOffice(cnpj: string): Promise<any> {
   const clean = cnpj.replace(/\D/g, "");
   if (clean.length !== 14) throw new Error("CNPJ inválido");
-  return cnpjBizPost("/empresas/cnpj", { cnpj: clean, filial: false });
-}
-
-/** Fallback público (sem custo) — usado só quando cnpj.biz falha. */
-async function fetchCnpjDataPublic(cnpj: string) {
-  const clean = cnpj.replace(/\D/g, "");
-  if (clean.length !== 14) throw new Error("CNPJ inválido");
-  const res = await fetch(`https://publica.cnpj.ws/cnpj/${clean}`, {
-    headers: { accept: "application/json" },
-  });
-  if (res.status === 429) throw new Error("Limite de consultas atingido, tente em instantes");
-  if (!res.ok) throw new Error(`CNPJ API ${res.status}`);
-  return res.json() as Promise<any>;
-}
-
-/** Payload cnpj.biz (formato /empresas/cnpj) → row parcial de lead. */
-function mapCnpjBizDetail(p: any) {
-  if (!p) return null;
-  const end = p.endereco ?? {};
-  const tels: string[] = Array.isArray(p.telefones)
-    ? p.telefones.map((t: any) => (typeof t === "string" ? t : t?.telefone)).filter(Boolean)
-    : [];
-  const socios = Array.isArray(p.socios)
-    ? p.socios.filter((s: any) => s && (typeof s === "string" ? s.trim() : s.nome))
-    : null;
-  return {
-    cnpj: p.cnpj ?? null,
-    razao_social: p.razao_social ?? null,
-    nome_fantasia: p.nome_fantasia ?? null,
-    capital_social: p.capital_social ? Number(p.capital_social) : null,
-    data_abertura: p.data_abertura ?? null,
-    bairro: end?.bairro ?? null,
-    cidade: end?.cidade?.nome ?? null,
-    uf: end?.estado?.sigla ?? null,
-    endereco: [end?.tipo_logradouro, end?.logradouro, end?.numero].filter(Boolean).join(" ") || null,
-    telefone_1: tels[0] ?? null,
-    telefone_2: tels[1] ?? null,
-    email: p.email ?? null,
-    socios: socios && socios.length ? socios : null,
-    proprietario: socios?.[0]?.nome ?? (typeof socios?.[0] === "string" ? socios[0] : null) ?? null,
-  };
-}
-
-/** Payload publica.cnpj.ws → row parcial (fallback). */
-function mapPublicCnpj(payload: any) {
-  const est = payload?.estabelecimento ?? {};
-  const tel1 = est?.ddd1 && est?.telefone1 ? `${est.ddd1}${est.telefone1}` : null;
-  const tel2 = est?.ddd2 && est?.telefone2 ? `${est.ddd2}${est.telefone2}` : null;
-  const socios = Array.isArray(payload?.socios) ? payload.socios : null;
-  return {
-    razao_social: payload?.razao_social ?? null,
-    nome_fantasia: est?.nome_fantasia ?? null,
-    capital_social: payload?.capital_social ? Number(payload.capital_social) : null,
-    data_abertura: est?.data_inicio_atividade ?? null,
-    bairro: est?.bairro ?? null,
-    cidade: est?.cidade?.nome ?? null,
-    uf: est?.estado?.sigla ?? null,
-    endereco: [est?.tipo_logradouro, est?.logradouro, est?.numero].filter(Boolean).join(" ") || null,
-    telefone_1: tel1,
-    telefone_2: tel2,
-    email: est?.email ?? null,
-    socios,
-    proprietario: socios?.[0]?.nome ?? socios?.[0]?.nome_socio ?? null,
-  };
-}
-
-/** Enriquecimento completo a partir de um CNPJ conhecido (cnpj.biz → fallback público). */
-async function enrichByCnpj(cnpj: string) {
-  try {
-    const detail = await cnpjBizFetchDetail(cnpj);
-    const mapped = mapCnpjBizDetail(detail);
-    if (mapped) return mapped;
-  } catch { /* fallback abaixo */ }
-  try {
-    const payload = await fetchCnpjDataPublic(cnpj);
-    return mapPublicCnpj(payload);
-  } catch { return null; }
-}
-
-/** Concorrência limitada para não sobrecarregar as APIs. */
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>) {
-  const out: R[] = [];
-  let i = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (i < items.length) {
-        const idx = i++;
-        try { out[idx] = await fn(items[idx]); }
-        catch { out[idx] = undefined as any; }
-      }
-    }),
+  const res = await fetchWithTimeout(
+    `https://open.cnpja.com/office/${clean}`,
+    { headers: { accept: "application/json", "user-agent": BROWSER_UA } },
+    10000,
   );
-  return out;
+  if (res.status === 429) throw new RateLimitError();
+  if (!res.ok) throw new Error(`open.cnpja ${res.status}`);
+  return res.json();
+}
+
+/** Payload open.cnpja → row parcial de lead. */
+function mapCnpja(p: any) {
+  if (!p) return null;
+  const company = p.company ?? {};
+  const members: any[] = Array.isArray(company.members) ? company.members : [];
+  const socios = members
+    .map((m) => ({
+      nome: m?.person?.name ?? null,
+      qualificacao: m?.role?.text ?? null,
+    }))
+    .filter((s) => s.nome);
+  const emails: any[] = Array.isArray(p.emails) ? p.emails : [];
+  const phones: any[] = Array.isArray(p.phones) ? p.phones : [];
+  const address = p.address ?? {};
+  const tel = (t: any) =>
+    t && t.area && t.number ? `${t.area}${t.number}` : t?.number ?? null;
+  const cnpj = (p.taxId ?? "").toString().replace(/\D/g, "") || null;
+  return {
+    cnpj,
+    razao_social: company.name ?? null,
+    nome_fantasia: p.alias ?? null,
+    capital_social: company.equity != null ? Number(company.equity) : null,
+    data_abertura: p.founded ?? null,
+    bairro: address.district ?? null,
+    cidade: address.city ?? null,
+    uf: normalizeUf(address.state) ?? address.state ?? null,
+    endereco:
+      [address.street, address.number].filter(Boolean).join(" ") || null,
+    telefone_1: tel(phones[0]),
+    telefone_2: tel(phones[1]),
+    email: emails[0]?.address ?? null,
+    socios: socios.length ? socios : null,
+    proprietario: socios[0]?.nome ?? null,
+  };
+}
+
+/** Mescla updates do CNPJ Já em uma linha base, preservando valores existentes se o novo vier vazio. */
+function mergeCnpjaOntoRow<T extends Record<string, any>>(row: T, detail: any): T {
+  const mapped = mapCnpja(detail);
+  if (!mapped) return row;
+  const clean = Object.fromEntries(
+    Object.entries(mapped).filter(([, v]) => v != null && v !== ""),
+  );
+  return {
+    ...row,
+    ...clean,
+    // preserva sinais únicos do Maps
+    website: (row as any).website ?? null,
+    google_rating: (row as any).google_rating,
+    google_reviews: (row as any).google_reviews,
+    telefone_1: (clean as any).telefone_1 ?? (row as any).telefone_1,
+  };
 }
 
 export const enrichLeadCnpj = createServerFn({ method: "POST" })
@@ -175,7 +169,17 @@ export const enrichLeadCnpj = createServerFn({ method: "POST" })
       .from("leads").select("id, cnpj").eq("id", data.leadId).eq("user_id", userId).maybeSingle();
     if (error) throw error;
     if (!lead?.cnpj) throw new Error("Lead sem CNPJ para enriquecer");
-    const mapped = await enrichByCnpj(lead.cnpj);
+    let payload: any;
+    try {
+      payload = await fetchCnpjaOffice(lead.cnpj);
+    } catch (e) {
+      throw new Error(
+        e instanceof RateLimitError
+          ? "Limite temporário do CNPJ Já atingido — tente em ~1 min"
+          : "Não foi possível enriquecer este CNPJ",
+      );
+    }
+    const mapped = mapCnpja(payload);
     if (!mapped) throw new Error("Não foi possível enriquecer este CNPJ");
     const { cnpj: _c, ...updates } = mapped as any;
     const { error: upErr } = await supabase.from("leads").update(updates).eq("id", lead.id);
@@ -303,27 +307,46 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       cnpj: null as string | null,
     })).filter((r) => r.nome_fantasia);
 
-    // Passo 2/3: cruzamento com CNPJ.biz por nome + cidade → QSA + capital + dados oficiais.
-    // Fallback de segurança: se não achar CNPJ, mantém dados do Maps (proprietário = null).
-    const enrichedRows = await mapWithConcurrency(baseRows, 5, async (row) => {
+    // Passo 2/3: pipeline serial — descobrir CNPJ (SERP + regex) e enriquecer em open.cnpja
+    // respeitando 5 req/min (12,5s entre chamadas). Falha silenciosa por lead.
+    const enrichedRows: typeof baseRows = [];
+    let cnpjaCalls = 0;
+    const total = baseRows.length;
+    for (let i = 0; i < total; i++) {
+      const row = baseRows[i];
       try {
-        const hit = await cnpjBizSearchByName(row.nome_fantasia!, row.cidade, row.uf);
-        if (!hit?.cnpj) return row;
-        const detail = await enrichByCnpj(hit.cnpj);
-        if (!detail) return { ...row, cnpj: hit.cnpj };
-        // Preserva dados locais do Maps (avaliações, site, telefones se CNPJ não trouxe).
-        return {
-          ...row,
-          ...Object.fromEntries(Object.entries(detail).filter(([, v]) => v != null && v !== "")),
-          website: row.website ?? (detail as any).website ?? null,
-          google_rating: row.google_rating,
-          google_reviews: row.google_reviews,
-          telefone_1: (detail as any).telefone_1 ?? row.telefone_1,
-        };
+        const cnpj = await findCnpjByText(row.nome_fantasia!, row.cidade);
+        if (cnpj) {
+          if (cnpjaCalls > 0) await sleep(12500);
+          try {
+            const detail = await fetchCnpjaOffice(cnpj);
+            cnpjaCalls++;
+            enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj }, detail));
+          } catch (e) {
+            if (e instanceof RateLimitError) {
+              // aguarda janela e tenta 1x mais
+              await sleep(12500);
+              try {
+                const detail = await fetchCnpjaOffice(cnpj);
+                cnpjaCalls++;
+                enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj }, detail));
+              } catch {
+                enrichedRows.push({ ...row, cnpj });
+              }
+            } else {
+              enrichedRows.push({ ...row, cnpj });
+            }
+          }
+        } else {
+          enrichedRows.push(row);
+        }
       } catch {
-        return row;
+        enrichedRows.push(row);
       }
-    });
+      // progresso incremental 30 → 95
+      const progress = 30 + Math.floor(((i + 1) / total) * 65);
+      await supabase.from("enrichment_jobs").update({ progress }).eq("id", job.id);
+    }
 
     let created = 0;
     if (enrichedRows.length) {
@@ -344,38 +367,60 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
-    // 1) Leads que já têm CNPJ mas sem sócios → busca detalhe direto
+    let apiCalls = 0;
+    const callCnpja = async (cnpj: string) => {
+      if (apiCalls > 0) await sleep(12500);
+      try {
+        const p = await fetchCnpjaOffice(cnpj);
+        apiCalls++;
+        return p;
+      } catch (e) {
+        if (e instanceof RateLimitError) {
+          await sleep(12500);
+          try {
+            const p = await fetchCnpjaOffice(cnpj);
+            apiCalls++;
+            return p;
+          } catch { return null; }
+        }
+        return null;
+      }
+    };
+
+    // 1) Leads que já têm CNPJ mas sem sócios → busca detalhe direto (serial)
     const { data: withCnpj } = await supabase
       .from("leads").select("id, cnpj")
       .not("cnpj", "is", null).is("socios", null).limit(50);
     let ok = 0;
     for (const l of withCnpj ?? []) {
-      const mapped = await enrichByCnpj(l.cnpj as string);
+      const payload = await callCnpja(l.cnpj as string);
+      const mapped = mapCnpja(payload);
       if (!mapped) continue;
       const { cnpj: _c, ...updates } = mapped as any;
       await supabase.from("leads").update(updates).eq("id", l.id);
       ok++;
     }
-    // 2) Leads sem CNPJ (Apify puro) → busca por nome+cidade+uf, salva CNPJ + QSA
+    // 2) Leads sem CNPJ (Apify puro) → SERP + regex, depois enriquece (serial)
     const { data: noCnpj } = await supabase
       .from("leads").select("id, nome_fantasia, cidade, uf")
       .is("cnpj", null).is("socios", null).limit(50);
     let matched = 0;
-    await mapWithConcurrency(noCnpj ?? [], 5, async (l: any) => {
-      if (!l.nome_fantasia) return;
-      const hit = await cnpjBizSearchByName(l.nome_fantasia, l.cidade, l.uf);
-      if (!hit?.cnpj) return;
-      const detail = await enrichByCnpj(hit.cnpj);
-      if (!detail) {
-        await supabase.from("leads").update({ cnpj: hit.cnpj }).eq("id", l.id);
-        return;
+    for (const l of noCnpj ?? []) {
+      if (!l.nome_fantasia) continue;
+      const cnpj = await findCnpjByText(l.nome_fantasia, l.cidade as any);
+      if (!cnpj) continue;
+      const payload = await callCnpja(cnpj);
+      const mapped = mapCnpja(payload);
+      if (!mapped) {
+        await supabase.from("leads").update({ cnpj }).eq("id", l.id);
+        continue;
       }
-      const updates: Record<string, any> = {};
-      for (const [k, v] of Object.entries(detail as any)) {
+      const updates: Record<string, any> = { cnpj };
+      for (const [k, v] of Object.entries(mapped as any)) {
         if (v != null && v !== "") updates[k] = v;
       }
       await supabase.from("leads").update(updates as any).eq("id", l.id);
       matched++;
-    });
+    }
     return { withCnpj: withCnpj?.length ?? 0, ok, searched: noCnpj?.length ?? 0, matched };
   });
