@@ -27,6 +27,17 @@ function normalizeUf(v?: string | null): string | null {
   return UF_MAP[s.toLowerCase()] ?? null;
 }
 
+/** Normalização compartilhada para comparar cidades. */
+function normCity(s?: string | null): string {
+  return (s ?? "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+/** True quando duas cidades são "a mesma" (tolerante a acento/caixa/sufixos). */
+function sameCity(a?: string | null, b?: string | null): boolean {
+  const na = normCity(a); const nb = normCity(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
+
 // ---------- helpers ----------
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -145,14 +156,8 @@ async function cnpjaSearchByName(
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
-    const norm = (s: string) =>
-      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    const target = norm(cidade);
-    const matches = records.filter((r) => {
-      const c = norm((r?.address?.city ?? "").toString());
-      return c && (c === target || c.includes(target) || target.includes(c));
-    });
-    return matches.length ? matches : records;
+    // Estrito: se nada bate na cidade alvo, descarta (evita casar homônimo em outra cidade).
+    return records.filter((r) => sameCity(r?.address?.city, cidade));
   } catch {
     return [];
   }
@@ -208,7 +213,11 @@ function nameCandidates(raw: string, cidade?: string | null): string[] {
 }
 
 /** Busca por telefone (DDD+numero). Aceita se retornar poucos registros na mesma UF. */
-async function cnpjaSearchByPhone(phone: string, uf?: string | null): Promise<any[]> {
+async function cnpjaSearchByPhone(
+  phone: string,
+  uf?: string | null,
+  cidade?: string | null,
+): Promise<any[]> {
   if (!process.env.CNPJA_API_KEY || !phone) return [];
   const digits = phone.replace(/\D/g, "");
   if (digits.length < 10) return [];
@@ -228,7 +237,9 @@ async function cnpjaSearchByPhone(phone: string, uf?: string | null): Promise<an
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
-    return records;
+    // Só aceita se bater com a cidade alvo (DDD compartilhado cobre várias cidades).
+    if (!cidade) return records;
+    return records.filter((r) => sameCity(r?.address?.city, cidade));
   } catch {
     return [];
   }
@@ -284,17 +295,27 @@ function mapCnpja(p: any) {
   };
 }
 
-/** Mescla updates do CNPJ Já em uma linha base, preservando valores existentes se o novo vier vazio. */
+/**
+ * Mescla updates do CNPJ Já em uma linha base, preservando valores existentes se o novo vier vazio.
+ * Nunca sobrescreve cidade/uf/bairro/endereco — a geografia vem do Google Maps e é a fonte confiável.
+ * Se `mapped.cidade` existir e não casar com `row.cidade`, retorna a linha original sem mudanças.
+ */
 function mergeCnpjaOntoRow<T extends Record<string, any>>(row: T, detail: any): T {
   const mapped = mapCnpja(detail);
   if (!mapped) return row;
+  if (mapped.cidade && (row as any).cidade && !sameCity(mapped.cidade, (row as any).cidade)) {
+    return row;
+  }
+  // Remove campos geográficos + vazios do payload para não sobrescrever o Maps.
+  const GEO_FIELDS = new Set(["cidade", "uf", "bairro", "endereco"]);
   const clean = Object.fromEntries(
-    Object.entries(mapped).filter(([, v]) => v != null && v !== ""),
+    Object.entries(mapped).filter(
+      ([k, v]) => v != null && v !== "" && !GEO_FIELDS.has(k),
+    ),
   );
   return {
     ...row,
     ...clean,
-    // preserva sinais únicos do Maps
     website: (row as any).website ?? null,
     google_rating: (row as any).google_rating,
     google_reviews: (row as any).google_reviews,
@@ -540,32 +561,44 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
     const MAX_LEADS = 300;
     const timeUp = () => Date.now() - t0 > TIME_BUDGET_MS;
 
-    const applyUpdates = async (leadId: string, cnpj: string | null, detail: any | null) => {
+    // Nunca sobrescreve cidade/uf/bairro/endereco. Se o mapped indicar cidade diferente
+    // da cidade atual do lead, o match é rejeitado.
+    const GEO_FIELDS = new Set(["cidade", "uf", "bairro", "endereco"]);
+    const applyUpdates = async (
+      leadId: string,
+      leadCidade: string | null,
+      cnpj: string | null,
+      detail: any | null,
+    ): Promise<"applied" | "rejected" | "noop"> => {
       const mapped = detail ? mapCnpja(detail) : null;
+      if (mapped && mapped.cidade && leadCidade && !sameCity(mapped.cidade, leadCidade)) {
+        return "rejected";
+      }
       const updates: Record<string, any> = {};
       if (cnpj) updates.cnpj = cnpj;
       if (mapped) {
         for (const [k, v] of Object.entries(mapped as any)) {
-          if (k === "cnpj") continue;
+          if (k === "cnpj" || GEO_FIELDS.has(k)) continue;
           if (v != null && v !== "") updates[k] = v;
         }
         updates.enrichment_status = "enriched";
       }
-      if (Object.keys(updates).length === 0) return;
+      if (Object.keys(updates).length === 0) return "noop";
       await supabase.from("leads").update(updates as any).eq("id", leadId);
+      return "applied";
     };
 
     // -------- 1) Leads que já têm CNPJ mas sem sócios (lookup direto) --------
     const { data: withCnpj } = await supabase
-      .from("leads").select("id, cnpj")
+      .from("leads").select("id, cnpj, cidade")
       .not("cnpj", "is", null).is("socios", null).limit(MAX_LEADS);
     let matched_by_cnpj = 0;
     for (const l of withCnpj ?? []) {
       if (timeUp()) break;
       const payload = await callCnpja(l.cnpj as string);
       if (!payload) continue;
-      await applyUpdates(l.id, null, payload);
-      matched_by_cnpj++;
+      const res = await applyUpdates(l.id, (l as any).cidade ?? null, null, payload);
+      if (res === "applied") matched_by_cnpj++;
     }
 
     // -------- 2) Leads sem CNPJ: variantes de nome → telefone → SERP --------
@@ -604,7 +637,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       if (!detail && hasPaid) {
         for (const t of [l.telefone_1, l.telefone_2]) {
           if (!t) continue;
-          const results = await cnpjaSearchByPhone(t as string, l.uf as any);
+          const results = await cnpjaSearchByPhone(t as string, l.uf as any, l.cidade as any);
           if (results.length >= 1 && results.length <= 3) {
             detail = results[0];
             cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
@@ -624,10 +657,17 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       }
 
       if (detail) {
-        await applyUpdates(l.id, cnpj, detail);
-        if (strategy === "name") matched_by_name++;
-        else if (strategy === "phone") matched_by_phone++;
-        else if (strategy === "serp") matched_by_serp++;
+        const res = await applyUpdates(l.id, l.cidade as any, cnpj, detail);
+        if (res === "applied") {
+          if (strategy === "name") matched_by_name++;
+          else if (strategy === "phone") matched_by_phone++;
+          else if (strategy === "serp") matched_by_serp++;
+        } else if (res === "rejected") {
+          await supabase.from("leads")
+            .update({ enrichment_status: "not_found" })
+            .eq("id", l.id);
+          not_found++;
+        }
       } else if (cnpj) {
         // achou CNPJ mas não conseguiu detalhe — persiste ao menos o CNPJ
         await supabase.from("leads").update({ cnpj }).eq("id", l.id);
