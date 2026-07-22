@@ -428,7 +428,25 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
             {phase === "done" && (
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                 {created !== null && <div>✓ {created} novos leads adicionados.</div>}
-                {backfillResult && <div>✓ Sócios: {backfillResult.ok} atualizados · {backfillResult.matched} novos CNPJs descobertos.</div>}
+                {backfillResult && (
+                  <>
+                    <div>✓ {backfillResult.ok} leads com CNPJ receberam QSA.</div>
+                    <div>
+                      ✓ {backfillResult.matched} novos CNPJs descobertos
+                      {" ("}
+                      nome: {backfillResult.matched_by_name ?? 0}
+                      {" · "}telefone: {backfillResult.matched_by_phone ?? 0}
+                      {" · "}busca: {backfillResult.matched_by_serp ?? 0}
+                      {")"}
+                    </div>
+                    {(backfillResult.not_found ?? 0) > 0 && (
+                      <div>· {backfillResult.not_found} sem match (marcados p/ pular).</div>
+                    )}
+                    {backfillResult.exhausted && (
+                      <div className="text-amber-600">⏱ Tempo esgotado — rode de novo para continuar.</div>
+                    )}
+                  </>
+                )}
               </div>
             )}
             {busy && (
