@@ -38,6 +38,73 @@ function sameCity(a?: string | null, b?: string | null): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+/**
+ * Conurbações conhecidas — aceitar match quando lead e CNPJ estão na mesma
+ * região metropolitana. Editável: adicionar novas listas conforme necessário.
+ * A geografia final NUNCA é sobrescrita — isso só relaxa o aceite do match.
+ */
+const CONURBATIONS: string[][] = [
+  // Vale do Aço (MG)
+  ["ipatinga", "coronel fabriciano", "timoteo", "santana do paraiso"],
+  // Grande BH
+  ["belo horizonte", "contagem", "betim", "nova lima", "santa luzia", "ribeirao das neves", "sabara", "vespasiano", "ibirite"],
+  // Grande Vitória
+  ["vitoria", "vila velha", "serra", "cariacica", "viana", "guarapari"],
+  // Grande SP + ABC
+  ["sao paulo", "guarulhos", "osasco", "santo andre", "sao bernardo do campo", "sao caetano do sul", "diadema", "maua", "ribeirao pires", "taboao da serra", "barueri", "cotia", "carapicuiba", "embu das artes", "itapecerica da serra", "suzano", "mogi das cruzes", "itaquaquecetuba"],
+  // Baixada Santista
+  ["santos", "sao vicente", "guaruja", "praia grande", "cubatao", "bertioga"],
+  // Grande Rio
+  ["rio de janeiro", "niteroi", "sao goncalo", "duque de caxias", "nova iguacu", "belford roxo", "sao joao de meriti", "nilopolis", "queimados", "mesquita", "magé", "itaguai"],
+  // RIDE-DF
+  ["brasilia", "aguas claras", "taguatinga", "ceilandia", "gama", "sobradinho", "planaltina", "samambaia", "recanto das emas", "santa maria", "riacho fundo"],
+  // Grande Curitiba
+  ["curitiba", "sao jose dos pinhais", "colombo", "pinhais", "araucaria", "fazenda rio grande"],
+  // Grande Porto Alegre
+  ["porto alegre", "canoas", "novo hamburgo", "sao leopoldo", "gravatai", "viamao", "cachoeirinha", "alvorada", "esteio", "sapucaia do sul"],
+  // Cachoeiro
+  ["cachoeiro de itapemirim", "itapemirim"],
+];
+function inSameConurbation(a: string, b: string): boolean {
+  for (const group of CONURBATIONS) {
+    if (group.includes(a) && group.includes(b)) return true;
+  }
+  return false;
+}
+/**
+ * Distância de Levenshtein normalizada (0..1). Usada como salvaguarda extra
+ * quando cidades diferem por sufixo curto (ex.: "Timóteo" vs "Timoteo Bairro").
+ */
+function levNorm(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return 1;
+  const m = a.length, n = b.length;
+  const dp = new Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n] / Math.max(m, n);
+}
+/**
+ * Aceita match quando as cidades são "a mesma" (sameCity) OU estão na mesma
+ * conurbação OU são muito parecidas (Levenshtein ≤ 0.35). Usada nos filtros
+ * de busca CNPJá. Nunca substitui a proteção do merge geográfico.
+ */
+function acceptCityMatch(leadCity?: string | null, cnpjCity?: string | null): boolean {
+  if (sameCity(leadCity, cnpjCity)) return true;
+  const a = normCity(leadCity); const b = normCity(cnpjCity);
+  if (!a || !b) return false;
+  if (inSameConurbation(a, b)) return true;
+  if (levNorm(a, b) <= 0.35) return true;
+  return false;
+}
+
 /** Extrai CEP (8 dígitos) de qualquer string. */
 function extractCep(s?: string | null): string | null {
   if (!s) return null;
@@ -181,7 +248,7 @@ async function cnpjaSearchByName(
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
     // Estrito: se nada bate na cidade alvo, descarta (evita casar homônimo em outra cidade).
-    return records.filter((r) => sameCity(r?.address?.city, cidade));
+    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
   } catch {
     return [];
   }
@@ -208,15 +275,23 @@ function nameCandidates(raw: string, cidade?: string | null): string[] {
     }
   };
   const base = cleanName(raw);
-  push(base);
-  // corta em separadores
-  const cuts = base.split(/[|\-–—•/,()]/).map((s) => s.trim()).filter(Boolean);
+  // Remove "(Cidade-UF)" ou "(Cidade)" no final
+  const baseNoParens = base.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+  push(baseNoParens);
+  // Antes de tudo, pega o que vem ANTES do primeiro separador " | ", " - ", " – "
+  const beforeSep = baseNoParens.split(/\s+[|\-–—]\s+/)[0]?.trim();
+  if (beforeSep) push(beforeSep);
+  // corta em separadores (mais agressivo)
+  const cuts = baseNoParens.split(/[|\-–—•/,()]/).map((s) => s.trim()).filter(Boolean);
   for (const c of cuts) push(c);
+  // Remove sufixos comuns de bairro/rótulo que aparecem depois de "- "
+  const suffixStrip = beforeSep ?? baseNoParens;
+  push(suffixStrip.replace(/\b(centro|matriz|filial|unidade|sede|bairro)\b.*$/gi, "").trim());
   // remove cidade no final
   if (cidade) {
     const city = cleanName(cidade);
     const re = new RegExp(`\\b${city.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "gi");
-    push(base.replace(re, ""));
+    push(baseNoParens.replace(re, ""));
     for (const c of cuts) push(c.replace(re, ""));
   }
   // sinônimos comuns do nicho
@@ -263,8 +338,8 @@ async function cnpjaSearchByPhone(
       : Array.isArray(json) ? json : [];
     // Telefone é uma chave forte: se retorna 1 único registro, aceita mesmo fora da cidade
     // (DDD compartilhado às vezes mostra cidade vizinha). Se retornar 2+, filtra por cidade.
-    if (!cidade || records.length <= 1) return records;
-    const filtered = records.filter((r) => sameCity(r?.address?.city, cidade));
+  if (!cidade || records.length <= 1) return records;
+      const filtered = records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
     return filtered.length > 0 ? filtered : [];
   } catch {
     return [];
@@ -294,7 +369,7 @@ async function cnpjaSearchByPostal(
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
-    return records.filter((r) => sameCity(r?.address?.city, cidade));
+    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
   } catch {
     return [];
   }
@@ -326,7 +401,7 @@ async function cnpjaSearchByDistrict(
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
-    return records.filter((r) => sameCity(r?.address?.city, cidade));
+    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
   } catch {
     return [];
   }
@@ -560,6 +635,14 @@ export const startEnrichmentJob = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
+    // Limpa jobs órfãos (running > 10 min sem update) do próprio usuário.
+    const staleCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+    await supabase.from("enrichment_jobs")
+      .update({ status: "failed", error: "abandoned (stale)" })
+      .eq("user_id", userId)
+      .in("status", ["queued", "running"])
+      .lt("updated_at", staleCutoff);
+
     const { data: job, error: jerr } = await supabase.from("enrichment_jobs").insert({
       user_id: userId, city: data.city, niche: data.niche, status: "queued", progress: 0,
     }).select("id").single();
@@ -699,7 +782,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       detail: any | null,
     ): Promise<"applied" | "rejected" | "noop"> => {
       const mapped = detail ? mapCnpja(detail) : null;
-      if (mapped && mapped.cidade && leadCidade && !sameCity(mapped.cidade, leadCidade)) {
+      if (mapped && mapped.cidade && leadCidade && !acceptCityMatch(leadCidade, mapped.cidade)) {
         return "rejected";
       }
       const updates: Record<string, any> = {};
@@ -709,7 +792,7 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
           if (k === "cnpj" || GEO_FIELDS.has(k)) continue;
           if (v != null && v !== "") updates[k] = v;
         }
-        updates.enrichment_status = "enriched";
+        updates.enrichment_status = isInactivePayload(detail) ? "inactive" : "enriched";
       }
       if (Object.keys(updates).length === 0) return "noop";
       await supabase.from("leads").update(updates as any).eq("id", leadId);
@@ -789,6 +872,16 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
     });
     await Promise.all(workers);
 
+    // Quantos leads ainda restam para próximos lotes (mesma seleção da fila)
+    const { count: remainingCount } = await supabase
+      .from("leads").select("*", { count: "exact", head: true })
+      .is("cnpj", null).is("socios", null)
+      .or("enrichment_status.is.null,enrichment_status.eq.retry");
+
+    let inactive = 0;
+    // conta rápida dos que viraram inactive nesse lote não é necessária;
+    // preferimos expor o total geral pela UI ao invés de derivar aqui.
+
     return {
       withCnpj: withCnpj?.length ?? 0,
       ok: matched_by_cnpj,
@@ -800,6 +893,9 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       matched_by_district,
       matched_by_serp,
       not_found,
+      processed: scanned,
+      remaining: remainingCount ?? 0,
+      inactive,
       elapsed_ms: Date.now() - t0,
       exhausted: timeUp(),
     };
@@ -847,7 +943,7 @@ export const enrichLeadOnDemand = createServerFn({ method: "POST" })
     const mapped = mapCnpja(found.detail);
     if (!mapped) return { ok: false };
     // Rejeita match de outra cidade (exceto quando bateu por telefone, chave forte)
-    if (found.strategy !== "phone" && mapped.cidade && (lead as any).cidade && !sameCity(mapped.cidade, (lead as any).cidade)) {
+    if (found.strategy !== "phone" && mapped.cidade && (lead as any).cidade && !acceptCityMatch((lead as any).cidade, mapped.cidade)) {
       await supabase.from("leads").update({ enrichment_status: "not_found" }).eq("id", lead.id);
       return { ok: false };
     }
