@@ -641,35 +641,14 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
     // respeitando 5 req/min (12,5s entre chamadas). Falha silenciosa por lead.
     const enrichedRows: typeof baseRows = [];
     const total = baseRows.length;
-    const hasPaid = !!process.env.CNPJA_API_KEY;
     for (let i = 0; i < total; i++) {
       const row = baseRows[i];
       try {
-        let detail: any = null;
-        let cnpj: string | null = null;
-        // 1) Preferido: CNPJá paga (busca + QSA em 1 chamada)
-        if (hasPaid) {
-          const results = await cnpjaSearchByName(row.nome_fantasia!, row.cidade, row.uf);
-          if (results.length > 0) {
-            detail = results[0];
-            cnpj = (detail?.taxId ?? "").toString().replace(/\D/g, "") || null;
-          }
-        }
-        // 2) Fallback: DuckDuckGo + lookup direto
-        if (!detail) {
-          cnpj = await findCnpjByText(row.nome_fantasia!, row.cidade);
-          if (cnpj) {
-            try {
-              detail = await fetchCnpjaOffice(cnpj);
-            } catch (e) {
-              if (e instanceof RateLimitError) await sleep(12500);
-            }
-          }
-        }
-        if (detail) {
-          enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj: cnpj ?? row.cnpj }, detail));
-        } else if (cnpj) {
-          enrichedRows.push({ ...row, cnpj });
+        const found = await cascadeFindCompany(row as any);
+        if (found?.detail) {
+          enrichedRows.push(mergeCnpjaOntoRow({ ...row, cnpj: found.cnpj ?? row.cnpj }, found.detail));
+        } else if (found?.cnpj) {
+          enrichedRows.push({ ...row, cnpj: found.cnpj });
         } else {
           enrichedRows.push(row);
         }
