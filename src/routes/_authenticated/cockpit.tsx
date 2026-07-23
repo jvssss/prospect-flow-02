@@ -563,6 +563,57 @@ function Cockpit() {
             </CardContent>
           </Card>
 
+          <div className="flex flex-col gap-6">
+          <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                <History className="h-3.5 w-3.5" /> Histórico deste lead
+              </div>
+              {(() => {
+                const logs = leadHistory ?? [];
+                if (logs.length === 0) {
+                  return <p className="mt-2 text-sm italic text-muted-foreground">Primeiro contato com este lead.</p>;
+                }
+                const last = logs[0] as any;
+                const meta = OUTCOMES.find((x) => x.key === last.outcome);
+                const Icon = meta?.icon ?? Phone;
+                return (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                          <Icon className="h-4 w-4" /> {meta?.label ?? last.outcome}
+                        </span>
+                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{timeAgoBR(last.created_at)}</span>
+                      </div>
+                      {last.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/85">{last.notes}</p>}
+                      {last.scheduled_return_at && (
+                        <p className="mt-1 text-xs text-muted-foreground">Retorno combinado: {new Date(last.scheduled_return_at).toLocaleString("pt-BR")}</p>
+                      )}
+                    </div>
+                    <p className="text-[11px] uppercase tracking-widest text-muted-foreground">{logs.length} ligaç{logs.length === 1 ? "ão" : "ões"} registrada{logs.length === 1 ? "" : "s"}</p>
+                    {logs.length > 1 && (
+                      <ul className="space-y-1">
+                        {logs.slice(1).map((l: any) => {
+                          const m = OUTCOMES.find((x) => x.key === l.outcome);
+                          return (
+                            <li key={l.id} className="flex items-start justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs">
+                              <div className="min-w-0">
+                                <div className="font-medium text-foreground">{m?.label ?? l.outcome}</div>
+                                {l.notes && <div className="truncate text-muted-foreground">{l.notes}</div>}
+                              </div>
+                              <span className="shrink-0 text-muted-foreground">{timeAgoBR(l.created_at)}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+
           <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
             <CardContent className="p-6">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Desfecho da ligação</p>
@@ -595,6 +646,7 @@ function Cockpit() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </div>
       )}
     </div>
