@@ -1,35 +1,44 @@
-## Problema
+## Diagnóstico (verificado no código)
 
-No Cockpit, o lead atual "troca sozinho" enquanto o SDR está preenchendo os campos (nome do decisor, ponte, observações). Quando isso acontece, ao clicar no desfecho da ligação as observações vão para o lead errado (ou são resetadas pelo `useEffect` de mudança de lead), dando a impressão de que "não salvou".
+Em `src/routes/_authenticated/cockpit.tsx > logOutcome` (linhas 209–271), ao clicar num desfecho o app **já salva tudo**:
 
-## Causa raiz
+- `call_logs` recebe `outcome`, `duration_seconds`, `nome_ponte`, `scheduled_return_at` e `notes` (formato `Decisor: X · <observações>`).
+- `leads` recebe `status`, `pipeline_stage`, `last_call_at`, e — quando preenchidos — `nome_ponte`, `proprietario` (nome do decisor), `retorno_agendado_em`, `meeting_at`, `followup_at`, `followup_notes`.
 
-Dois fatores combinados em `src/routes/_authenticated/cockpit.tsx`:
+O que dá a sensação de "não salvou" é que, logo depois, o `refetchQueue()` puxa o **próximo lead** e o `useEffect([lead?.id])` (linha 204) zera os campos. Os dados estão no banco — só não voltam a aparecer na tela.
 
-1. **Ordenação instável da fila.** A query `cockpit-queue` ordena só por `last_call_at asc nullsFirst` e faz `limit(1)`. Vários leads têm `last_call_at = null`, e o Postgres não garante ordem entre nulls — cada `refetch` pode retornar um lead diferente como "o primeiro".
-2. **JIT de enriquecimento chama `refetchQueue()` sempre.** Quando o lead atual não tem proprietário/sócios, o cockpit dispara `enrichLeadOnDemand` e, no `.then/.finally`, refaz a query. Como a ordenação não é estável, o "primeiro" muda → o `useEffect([lead?.id])` limpa `nomePonte / nomeDecisor / callNotes / returnAt / followupAt / followupNotes` no meio da digitação. Se a API CNPJá não encontra, o mesmo refetch acontece e ainda por cima o lead pode cair para o fim da fila em refetches futuros.
+E hoje, se você voltar ao mesmo lead depois, **nada é pré-carregado** nem exibido: os inputs iniciam vazios e não há histórico visível.
 
-Ou seja: não é o desfecho que está pulando — é a fila que se reembaralha por causa do JIT + ordenação sem desempate.
+## O que mudar (só `src/routes/_authenticated/cockpit.tsx`)
 
-## Correção
+1. **Buscar histórico do lead atual** com uma nova query `["cockpit-lead-history", lead.id]`:
+   - `call_logs` do `lead_id`, ordenado por `created_at desc`, limit 5 — para mostrar histórico e pegar o último desfecho.
+   - Reaproveitar `lead.nome_ponte`, `lead.proprietario`, `lead.followup_notes`, `lead.followup_at`, `lead.retorno_agendado_em` que já vêm na query da fila.
 
-Ficar tudo em `src/routes/_authenticated/cockpit.tsx` (nenhuma mudança de backend nem de schema).
+2. **Novo card "Histórico deste lead"** na coluna direita, acima do bloco de desfechos:
+   - Último desfecho (label + ícone + quando, ex.: "Ponte / Secretária · há 2 dias").
+   - Última observação salva (`notes` do call_log mais recente).
+   - Contador: "N ligações registradas".
+   - Lista compacta das últimas 3–5 tentativas (data + desfecho + trecho da nota).
+   - Se nunca houve ligação: "Primeiro contato com este lead."
 
-1. **Fila estável**: adicionar desempate determinístico na query `cockpit-queue`:
-   ```
-   .order("last_call_at", { ascending: true, nullsFirst: true })
-   .order("id", { ascending: true })
-   ```
-   Assim, entre leads com `last_call_at = null`, sempre volta o mesmo primeiro até ele receber um desfecho.
+3. **Pré-preencher os inputs ao carregar o lead** (ajustar o `useEffect` da linha 204):
+   - `nomePonte` ← `lead.nome_ponte ?? ""`
+   - `nomeDecisor` ← `lead.proprietario ?? ""` (só quando não veio de sócio/QSA — hoje `proprietario` é usado como decisor manual)
+   - `followupAt` ← `lead.followup_at` formatado para `datetime-local` (se houver)
+   - `followupNotes` ← `lead.followup_notes ?? ""`
+   - `callNotes` continua **vazio** (cada ligação = observação nova; a anterior fica visível no card de histórico).
+   - `returnAt` continua vazio (agendamento é decisão da nova ligação).
 
-2. **JIT não refaz a fila**: substituir o `refetchQueue()` do `.then` do `enrichLeadOnDemand` por uma atualização in-place do cache — buscar só a linha desse `lead.id` e usar `qc.setQueryData(["cockpit-queue", city], (old) => old?.map(l => l.id === lead.id ? merged : l))`. Se a API não encontrar (throw ou `not_found`), não faz nada: o lead permanece exibido, o usuário continua digitando e decide o desfecho manualmente. Nada de auto-skip.
+4. **Após salvar desfecho**: invalidar também `["cockpit-lead-history", lead.id]` para o próximo lead já vir com seu próprio histórico atualizado.
 
-3. **Preservar campos digitados**: o `useEffect` que reseta os campos deve continuar disparando só em troca real de lead. Com (1) e (2), `lead?.id` não muda mais sozinho, então os campos deixam de ser apagados.
+## Fora do escopo
 
-4. **Salvar sempre observação, mesmo sem decisor**: revisar o `logOutcome` para garantir que `callNotes` vai para `call_logs.notes` mesmo quando `nomeDecisor` está vazio (hoje já vai, mas confirmar o join com `.filter(Boolean).join(" · ")` — manter e cobrir o caso `callNotes` sozinho).
+- Nenhuma mudança de schema (colunas `nome_ponte`, `followup_at`, `followup_notes`, `retorno_agendado_em` já existem em `leads`; `call_logs.notes` já guarda decisor+observações).
+- Sem mexer em CRM, enriquecimento, fila ou métricas diárias.
 
 ## Verificação
 
-- Selecionar cidade com leads sem proprietário → confirmar no console/network que o JIT roda uma vez e o `lead.id` exibido não muda.
-- Digitar "Nome do decisor" e "Observações", clicar em cada desfecho (1–5) e conferir em `call_logs` (via read query) que `notes` e demais campos foram gravados para o `lead_id` correto.
-- Forçar um lead cujo CNPJ a API não acha → confirmar que continua exibido e não pula até o usuário escolher o desfecho.
+- Preencher ponte + observações, clicar em desfecho → conferir toast e que o lead sai da fila.
+- Voltar ao mesmo lead (mudar cidade e voltar, ou reabrir depois): os campos "Nome da ponte" e "Nome do decisor" devem vir preenchidos; o card de histórico deve mostrar o último desfecho + observação salva.
+- Rodar 2 ligações no mesmo lead (ex.: "Não atendeu" → depois "Ponte"): a segunda vez deve mostrar a primeira no histórico.
