@@ -136,6 +136,20 @@ function Cockpit() {
 
   const lead = leadQueue?.[0] ?? null;
 
+  const { data: leadHistory } = useQuery({
+    queryKey: ["cockpit-lead-history", lead?.id ?? null],
+    enabled: !!lead?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("call_logs")
+        .select("id, outcome, notes, duration_seconds, nome_ponte, scheduled_return_at, created_at")
+        .eq("lead_id", lead!.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      return data ?? [];
+    },
+  });
+
   const { data: cityStats } = useQuery({
     queryKey: ["city-reviews", lead?.cidade ?? null],
     enabled: !!lead?.cidade,
