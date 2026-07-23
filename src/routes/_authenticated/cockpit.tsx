@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
   Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned, Sparkles,
+  History,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,6 +45,26 @@ const OUTCOMES: { key: Outcome; label: string; hotkey: string; icon: React.Eleme
 ];
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function timeAgoBR(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.round(diff / 60000);
+  if (m < 1) return "agora";
+  if (m < 60) return `há ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.round(h / 24);
+  if (d < 30) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
 
 function Cockpit() {
   const qc = useQueryClient();
@@ -114,6 +135,20 @@ function Cockpit() {
   });
 
   const lead = leadQueue?.[0] ?? null;
+
+  const { data: leadHistory } = useQuery({
+    queryKey: ["cockpit-lead-history", lead?.id ?? null],
+    enabled: !!lead?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("call_logs")
+        .select("id, outcome, notes, duration_seconds, nome_ponte, scheduled_return_at, created_at")
+        .eq("lead_id", lead!.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      return data ?? [];
+    },
+  });
 
   const { data: cityStats } = useQuery({
     queryKey: ["city-reviews", lead?.cidade ?? null],
@@ -200,11 +235,16 @@ function Cockpit() {
       .finally(() => setJitLoading(false));
   }, [lead?.id, lead?.proprietario, lead?.socios, lead?.enrichment_status, enrichNow, qc, city]);
 
-  // reset campos ao trocar de lead
+  // Ao trocar de lead: pré-preenche o que já foi salvo antes. Observações
+  // e "agendar retorno" ficam em branco (cada ligação é uma nota nova).
   useEffect(() => {
-    setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
-    setFollowupAt(""); setFollowupNotes("");
-  }, [lead?.id]);
+    setNomePonte((lead?.nome_ponte as string | null) ?? "");
+    setNomeDecisor((lead?.proprietario as string | null) ?? "");
+    setFollowupAt(toDatetimeLocal(lead?.followup_at as string | null | undefined));
+    setFollowupNotes((lead?.followup_notes as string | null) ?? "");
+    setReturnAt("");
+    setCallNotes("");
+  }, [lead?.id, lead?.nome_ponte, lead?.proprietario, lead?.followup_at, lead?.followup_notes]);
 
   async function logOutcome(o: Outcome) {
     if (!lead) return;
@@ -267,6 +307,7 @@ function Cockpit() {
     qc.invalidateQueries({ queryKey: ["crm-leads"] });
     qc.invalidateQueries({ queryKey: ["leads"] });
     qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
+    qc.invalidateQueries({ queryKey: ["cockpit-lead-history", lead.id] });
     refetchQueue();
   }
 
@@ -522,6 +563,57 @@ function Cockpit() {
             </CardContent>
           </Card>
 
+          <div className="flex flex-col gap-6">
+          <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                <History className="h-3.5 w-3.5" /> Histórico deste lead
+              </div>
+              {(() => {
+                const logs = leadHistory ?? [];
+                if (logs.length === 0) {
+                  return <p className="mt-2 text-sm italic text-muted-foreground">Primeiro contato com este lead.</p>;
+                }
+                const last = logs[0] as any;
+                const meta = OUTCOMES.find((x) => x.key === last.outcome);
+                const Icon = meta?.icon ?? Phone;
+                return (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                          <Icon className="h-4 w-4" /> {meta?.label ?? last.outcome}
+                        </span>
+                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{timeAgoBR(last.created_at)}</span>
+                      </div>
+                      {last.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/85">{last.notes}</p>}
+                      {last.scheduled_return_at && (
+                        <p className="mt-1 text-xs text-muted-foreground">Retorno combinado: {new Date(last.scheduled_return_at).toLocaleString("pt-BR")}</p>
+                      )}
+                    </div>
+                    <p className="text-[11px] uppercase tracking-widest text-muted-foreground">{logs.length} ligaç{logs.length === 1 ? "ão" : "ões"} registrada{logs.length === 1 ? "" : "s"}</p>
+                    {logs.length > 1 && (
+                      <ul className="space-y-1">
+                        {logs.slice(1).map((l: any) => {
+                          const m = OUTCOMES.find((x) => x.key === l.outcome);
+                          return (
+                            <li key={l.id} className="flex items-start justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs">
+                              <div className="min-w-0">
+                                <div className="font-medium text-foreground">{m?.label ?? l.outcome}</div>
+                                {l.notes && <div className="truncate text-muted-foreground">{l.notes}</div>}
+                              </div>
+                              <span className="shrink-0 text-muted-foreground">{timeAgoBR(l.created_at)}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+
           <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
             <CardContent className="p-6">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Desfecho da ligação</p>
@@ -554,6 +646,7 @@ function Cockpit() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </div>
       )}
     </div>
