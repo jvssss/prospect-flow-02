@@ -107,6 +107,7 @@ function Cockpit() {
         .eq("cidade", city)
         .in("status", ["new", "no_answer", "gatekeeper", "callback"])
         .order("last_call_at", { ascending: true, nullsFirst: true })
+        .order("id", { ascending: true })
         .limit(1);
       return data ?? [];
     },
@@ -180,11 +181,24 @@ function Cockpit() {
     if (jitTried.current.has(lead.id)) return;
     jitTried.current.add(lead.id);
     setJitLoading(true);
+    const targetId = lead.id;
     enrichNow({ data: { leadId: lead.id } })
-      .then(() => { refetchQueue(); })
+      .then(async () => {
+        // Atualiza somente a linha atual no cache — nunca reordena a fila
+        // nem substitui o lead em foco enquanto o SDR digita.
+        const { data: fresh } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("id", targetId)
+          .maybeSingle();
+        if (!fresh) return;
+        qc.setQueryData<any[]>(["cockpit-queue", city], (old) =>
+          Array.isArray(old) ? old.map((l) => (l.id === targetId ? { ...l, ...fresh } : l)) : old,
+        );
+      })
       .catch(() => {})
       .finally(() => setJitLoading(false));
-  }, [lead?.id, lead?.proprietario, lead?.socios, lead?.enrichment_status, enrichNow, refetchQueue]);
+  }, [lead?.id, lead?.proprietario, lead?.socios, lead?.enrichment_status, enrichNow, qc, city]);
 
   // reset campos ao trocar de lead
   useEffect(() => {
