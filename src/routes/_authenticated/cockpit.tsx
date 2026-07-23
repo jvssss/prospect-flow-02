@@ -235,11 +235,16 @@ function Cockpit() {
       .finally(() => setJitLoading(false));
   }, [lead?.id, lead?.proprietario, lead?.socios, lead?.enrichment_status, enrichNow, qc, city]);
 
-  // reset campos ao trocar de lead
+  // Ao trocar de lead: pré-preenche o que já foi salvo antes. Observações
+  // e "agendar retorno" ficam em branco (cada ligação é uma nota nova).
   useEffect(() => {
-    setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
-    setFollowupAt(""); setFollowupNotes("");
-  }, [lead?.id]);
+    setNomePonte((lead?.nome_ponte as string | null) ?? "");
+    setNomeDecisor((lead?.proprietario as string | null) ?? "");
+    setFollowupAt(toDatetimeLocal(lead?.followup_at as string | null | undefined));
+    setFollowupNotes((lead?.followup_notes as string | null) ?? "");
+    setReturnAt("");
+    setCallNotes("");
+  }, [lead?.id, lead?.nome_ponte, lead?.proprietario, lead?.followup_at, lead?.followup_notes]);
 
   async function logOutcome(o: Outcome) {
     if (!lead) return;
@@ -302,6 +307,7 @@ function Cockpit() {
     qc.invalidateQueries({ queryKey: ["crm-leads"] });
     qc.invalidateQueries({ queryKey: ["leads"] });
     qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
+    qc.invalidateQueries({ queryKey: ["cockpit-lead-history", lead.id] });
     refetchQueue();
   }
 
