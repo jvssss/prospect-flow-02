@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
   Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned, Sparkles,
+  History,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,6 +45,26 @@ const OUTCOMES: { key: Outcome; label: string; hotkey: string; icon: React.Eleme
 ];
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function timeAgoBR(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.round(diff / 60000);
+  if (m < 1) return "agora";
+  if (m < 60) return `há ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.round(h / 24);
+  if (d < 30) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
 
 function Cockpit() {
   const qc = useQueryClient();
