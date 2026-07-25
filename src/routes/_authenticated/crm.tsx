@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Search, Flame, MessageCircle, CalendarCheck, XCircle,
-  Trophy, UserX, RefreshCcw, Users,
+  Trophy, UserX, RefreshCcw, Users, RotateCcw,
 } from "lucide-react";
 import { updateLeadStage, updateMeeting } from "@/lib/qualification.functions";
 import { formatPhoneBR } from "@/lib/goldenMath";
@@ -104,6 +104,7 @@ function SearchBar({ q, onChange }: { q: string; onChange: (v: string) => void }
 const SDR_STAGES = [
   { key: "activate", label: "Ativar", icon: Flame, accent: "bg-primary/10 text-primary", bar: "bg-primary" },
   { key: "in_contact", label: "Em Contato", icon: MessageCircle, accent: "bg-blue-100 text-blue-700", bar: "bg-blue-500" },
+  { key: "followup", label: "Follow-ups", icon: RotateCcw, accent: "bg-violet-100 text-violet-700", bar: "bg-violet-500" },
   { key: "scheduled", label: "Agendou", icon: CalendarCheck, accent: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500" },
   { key: "dismissed", label: "Dispensou", icon: XCircle, accent: "bg-amber-100 text-amber-700", bar: "bg-amber-500" },
 ] as const;
@@ -118,28 +119,45 @@ function SdrBoard({ leads, totalLeads, onOpen, search }: { leads: any[]; totalLe
   });
 
   const byStage = useMemo(() => {
-    const m: Record<string, any[]> = { activate: [], in_contact: [], scheduled: [], dismissed: [] };
-    for (const l of leads) (m[l.pipeline_stage] ?? m.activate).push(l);
+    const m: Record<string, any[]> = { activate: [], in_contact: [], followup: [], scheduled: [], dismissed: [] };
+    for (const l of leads) {
+      const isFollowup =
+        (l.pipeline_stage === "activate" || l.pipeline_stage === "in_contact") &&
+        (!!l.followup_at || !!l.proprietario);
+      if (isFollowup) m.followup.push(l);
+      else (m[l.pipeline_stage] ?? m.activate).push(l);
+    }
+    // Follow-ups: mais próximos primeiro
+    m.followup.sort((a, b) => {
+      const ta = a.followup_at ? new Date(a.followup_at).getTime() : Infinity;
+      const tb = b.followup_at ? new Date(b.followup_at).getTime() : Infinity;
+      return ta - tb;
+    });
     return m;
   }, [leads]);
 
   const totals = {
     total: totalLeads,
     in_contact: byStage.in_contact.length,
+    followup: byStage.followup.length,
     scheduled: byStage.scheduled.length,
     dismissed: byStage.dismissed.length,
   };
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <Kpi tone="primary" label="Total de leads" value={totals.total} sub="no funil do SDR" icon={Flame} />
         <Kpi label="Em contato" value={totals.in_contact} sub="sendo trabalhados" icon={MessageCircle} />
+        <Kpi label="Follow-ups" value={totals.followup} sub="decisor mapeado" icon={RotateCcw} />
         <Kpi label="Agendados" value={totals.scheduled} sub="prontos para o closer" icon={CalendarCheck} />
         <Kpi label="Dispensados" value={totals.dismissed} sub="arquivados" icon={XCircle} />
       </div>
       <div className="mt-6">{search}</div>
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4">
+        <StatusLegend />
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {SDR_STAGES.map((s) => {
           const list = byStage[s.key] ?? [];
           const Icon = s.icon;
@@ -280,11 +298,12 @@ function LeadCard({ lead, onOpen, onMove, onCloserAction, showSdrActions, showCl
   const initial = (lead.nome_fantasia || lead.razao_social || "?").trim().charAt(0).toUpperCase();
   const meetingDate = lead.meeting_at ? new Date(lead.meeting_at) : null;
   const daysAgo = meetingDate ? Math.round((Date.now() - meetingDate.getTime()) / 86400000) : null;
+  const accent = accentFor(lead);
 
   return (
     <div
       onClick={onOpen}
-      className="group cursor-pointer rounded-2xl border border-border bg-background p-3 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]"
+      className={`group cursor-pointer rounded-2xl border border-border border-l-4 ${accent} bg-background p-3 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]`}
     >
       <div className="flex items-start gap-2">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm font-bold text-primary">{initial}</div>
