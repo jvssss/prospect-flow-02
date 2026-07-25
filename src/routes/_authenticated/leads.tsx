@@ -262,6 +262,7 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState<"idle" | "maps" | "cnpj" | "backfill" | "done">("idle");
   const [created, setCreated] = useState<number | null>(null);
+  const [rejectedCategory, setRejectedCategory] = useState<number>(0);
   const [batchNum, setBatchNum] = useState(0);
   const [backfillResult, setBackfillResult] = useState<{
     ok: number; matched: number;
@@ -291,7 +292,7 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
 
   function reset() {
     setJobId(null); setStatus(""); setProgress(0); setPhase("idle");
-    setCreated(null); setBackfillResult(null); setBatchNum(0);
+    setCreated(null); setBackfillResult(null); setBatchNum(0); setRejectedCategory(0);
     cancelRef.current = false;
   }
 
@@ -365,6 +366,10 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
         if ((j.progress ?? 0) > 30) setPhase("cnpj");
         if (j.status === "done") {
           setCreated(j.leads_created ?? 0);
+          setRejectedCategory(j.rejected_category ?? 0);
+          if ((j.rejected_category ?? 0) > 0) {
+            toast.message(`${j.rejected_category} places descartados (não são autoescola)`);
+          }
           onDone();
           // Fase seguinte: backfill de sócios sobre a base inteira
           runBackfillPhase();
