@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Search, Flame, MessageCircle, CalendarCheck, XCircle,
-  Trophy, UserX, RefreshCcw, Users,
+  Trophy, UserX, RefreshCcw, Users, RotateCcw,
 } from "lucide-react";
 import { updateLeadStage, updateMeeting } from "@/lib/qualification.functions";
 import { formatPhoneBR } from "@/lib/goldenMath";
@@ -104,6 +104,7 @@ function SearchBar({ q, onChange }: { q: string; onChange: (v: string) => void }
 const SDR_STAGES = [
   { key: "activate", label: "Ativar", icon: Flame, accent: "bg-primary/10 text-primary", bar: "bg-primary" },
   { key: "in_contact", label: "Em Contato", icon: MessageCircle, accent: "bg-blue-100 text-blue-700", bar: "bg-blue-500" },
+  { key: "followup", label: "Follow-ups", icon: RotateCcw, accent: "bg-violet-100 text-violet-700", bar: "bg-violet-500" },
   { key: "scheduled", label: "Agendou", icon: CalendarCheck, accent: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500" },
   { key: "dismissed", label: "Dispensou", icon: XCircle, accent: "bg-amber-100 text-amber-700", bar: "bg-amber-500" },
 ] as const;
@@ -118,28 +119,45 @@ function SdrBoard({ leads, totalLeads, onOpen, search }: { leads: any[]; totalLe
   });
 
   const byStage = useMemo(() => {
-    const m: Record<string, any[]> = { activate: [], in_contact: [], scheduled: [], dismissed: [] };
-    for (const l of leads) (m[l.pipeline_stage] ?? m.activate).push(l);
+    const m: Record<string, any[]> = { activate: [], in_contact: [], followup: [], scheduled: [], dismissed: [] };
+    for (const l of leads) {
+      const isFollowup =
+        (l.pipeline_stage === "activate" || l.pipeline_stage === "in_contact") &&
+        (!!l.followup_at || !!l.proprietario);
+      if (isFollowup) m.followup.push(l);
+      else (m[l.pipeline_stage] ?? m.activate).push(l);
+    }
+    // Follow-ups: mais próximos primeiro
+    m.followup.sort((a, b) => {
+      const ta = a.followup_at ? new Date(a.followup_at).getTime() : Infinity;
+      const tb = b.followup_at ? new Date(b.followup_at).getTime() : Infinity;
+      return ta - tb;
+    });
     return m;
   }, [leads]);
 
   const totals = {
     total: totalLeads,
     in_contact: byStage.in_contact.length,
+    followup: byStage.followup.length,
     scheduled: byStage.scheduled.length,
     dismissed: byStage.dismissed.length,
   };
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <Kpi tone="primary" label="Total de leads" value={totals.total} sub="no funil do SDR" icon={Flame} />
         <Kpi label="Em contato" value={totals.in_contact} sub="sendo trabalhados" icon={MessageCircle} />
+        <Kpi label="Follow-ups" value={totals.followup} sub="decisor mapeado" icon={RotateCcw} />
         <Kpi label="Agendados" value={totals.scheduled} sub="prontos para o closer" icon={CalendarCheck} />
         <Kpi label="Dispensados" value={totals.dismissed} sub="arquivados" icon={XCircle} />
       </div>
       <div className="mt-6">{search}</div>
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4">
+        <StatusLegend />
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {SDR_STAGES.map((s) => {
           const list = byStage[s.key] ?? [];
           const Icon = s.icon;
@@ -272,6 +290,38 @@ function EmptyCol({ text = "Sem leads nesta etapa." }: { text?: string }) {
   return <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-muted-foreground">{text}</div>;
 }
 
+/* ---------------- Status accents & legend ---------------- */
+
+const STATUS_ACCENTS: Record<string, { border: string; dot: string; label: string }> = {
+  followup:          { border: "border-l-violet-500",  dot: "bg-violet-500",  label: "Follow-up" },
+  meeting_scheduled: { border: "border-l-emerald-500", dot: "bg-emerald-500", label: "Reunião agendada" },
+  gatekeeper:        { border: "border-l-blue-500",    dot: "bg-blue-500",    label: "Ponte/Secretária" },
+  callback:          { border: "border-l-amber-500",   dot: "bg-amber-500",   label: "Retornar depois" },
+  not_interested:    { border: "border-l-rose-500",    dot: "bg-rose-500",    label: "Sem interesse" },
+  no_answer:         { border: "border-l-slate-400",   dot: "bg-slate-400",   label: "Não atendeu" },
+};
+
+function accentFor(lead: any): string {
+  if (lead.followup_at && new Date(lead.followup_at).getTime() > 0) return STATUS_ACCENTS.followup.border;
+  const s = String(lead.status ?? "");
+  return STATUS_ACCENTS[s]?.border ?? "border-l-border";
+}
+
+function StatusLegend() {
+  const items = ["followup","meeting_scheduled","gatekeeper","callback","not_interested","no_answer"];
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-full border border-[color:var(--border-subtle)] bg-white/60 px-4 py-2 text-[11px] text-muted-foreground backdrop-blur-xl">
+      <span className="font-medium uppercase tracking-widest">Legenda</span>
+      {items.map((k) => (
+        <span key={k} className="inline-flex items-center gap-1.5">
+          <span className={`h-2 w-2 rounded-full ${STATUS_ACCENTS[k].dot}`} />
+          {STATUS_ACCENTS[k].label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function LeadCard({ lead, onOpen, onMove, onCloserAction, showSdrActions, showCloserActions }: {
   lead: any; onOpen: () => void;
   onMove?: (s: string) => void; onCloserAction?: (a: "held" | "no_show" | "won" | "reschedule") => void;
@@ -280,11 +330,12 @@ function LeadCard({ lead, onOpen, onMove, onCloserAction, showSdrActions, showCl
   const initial = (lead.nome_fantasia || lead.razao_social || "?").trim().charAt(0).toUpperCase();
   const meetingDate = lead.meeting_at ? new Date(lead.meeting_at) : null;
   const daysAgo = meetingDate ? Math.round((Date.now() - meetingDate.getTime()) / 86400000) : null;
+  const accent = accentFor(lead);
 
   return (
     <div
       onClick={onOpen}
-      className="group cursor-pointer rounded-2xl border border-border bg-background p-3 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]"
+      className={`group cursor-pointer rounded-2xl border border-border border-l-4 ${accent} bg-background p-3 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]`}
     >
       <div className="flex items-start gap-2">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm font-bold text-primary">{initial}</div>

@@ -124,13 +124,37 @@ function Cockpit() {
     queryKey: ["cockpit-queue", city],
     enabled: !!city,
     queryFn: async () => {
+      // Busca um lote e ordena por prioridade em memória:
+      //  1) follow-up marcado (mais próximo primeiro)
+      //  2) callback vencido (retorno_agendado_em <= agora)
+      //  3) nunca ligado (last_call_at == null)
+      //  4) resto por last_call_at asc
       const { data } = await supabase.from("leads").select("*")
         .eq("cidade", city)
         .in("status", ["new", "no_answer", "gatekeeper", "callback"])
         .order("last_call_at", { ascending: true, nullsFirst: true })
         .order("id", { ascending: true })
-        .limit(1);
-      return data ?? [];
+        .limit(30);
+      const now = Date.now();
+      const rows = (data ?? []).slice();
+      const priority = (l: any) => {
+        if (l.followup_at) return 0;
+        if (l.retorno_agendado_em && new Date(l.retorno_agendado_em).getTime() <= now) return 1;
+        if (!l.last_call_at) return 2;
+        return 3;
+      };
+      const sortKey = (l: any) => {
+        if (l.followup_at) return new Date(l.followup_at).getTime();
+        if (l.retorno_agendado_em) return new Date(l.retorno_agendado_em).getTime();
+        if (l.last_call_at) return new Date(l.last_call_at).getTime();
+        return 0;
+      };
+      rows.sort((a, b) => {
+        const pa = priority(a), pb = priority(b);
+        if (pa !== pb) return pa - pb;
+        return sortKey(a) - sortKey(b);
+      });
+      return rows.slice(0, 1);
     },
   });
 
@@ -396,6 +420,12 @@ function Cockpit() {
                 <div>
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">{lead.razao_social ?? "Sem razão social"}</p>
                   <h2 className="mt-1 text-3xl tracking-tight">{lead.nome_fantasia ?? lead.razao_social ?? "Lead"}</h2>
+                  {lead.followup_at && (
+                    <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                      🔁 Follow-up{lead.proprietario ? ` com ${lead.proprietario}` : ""} · {new Date(lead.followup_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {lead.followup_notes ? <span className="ml-1 font-normal opacity-80">· {lead.followup_notes}</span> : null}
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                     {lead.bairro && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{lead.bairro}{lead.cidade ? ` · ${lead.cidade}` : ""}</span>}
                     {lead.capital_social ? <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Cap. {formatBRL(Number(lead.capital_social))}</span> : null}

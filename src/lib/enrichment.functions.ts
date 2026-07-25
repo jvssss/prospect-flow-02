@@ -701,7 +701,30 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       const c = norm(p.city ?? p.address ?? "");
       return targetCity && (c === targetCity || c.includes(targetCity));
     });
-    const baseRows = filteredItems.map((p: any) => ({
+    // Filtro de categoria: quando o nicho é autoescola, descartar places
+    // cujo categoryName/categories/title não indiquem autoescola/CFC.
+    const nicheIsAutoescola = /autoescola|auto\s*escola|cfc|driving/i.test(job.niche ?? "");
+    const isAutoescola = (p: any) => {
+      const cats = [p.categoryName, ...(Array.isArray(p.categories) ? p.categories : [])]
+        .filter(Boolean)
+        .map((c: any) => String(c).toLowerCase());
+      const title = String(p.title ?? p.name ?? "").toLowerCase();
+      const hitCat = cats.some((c) =>
+        c.includes("driving school") ||
+        c.includes("autoescola") ||
+        c.includes("auto escola") ||
+        c.includes("auto-escola") ||
+        c.includes("centro de formação") ||
+        c.includes("centro de formacao"),
+      );
+      const hitTitle = /\bauto[\s-]*escola\b|\bcfc\b|centro de forma[cç][ãa]o/i.test(title);
+      return hitCat || hitTitle;
+    };
+    const categoryFiltered = nicheIsAutoescola
+      ? filteredItems.filter(isAutoescola)
+      : filteredItems;
+    const rejectedByCategory = filteredItems.length - categoryFiltered.length;
+    const baseRows = categoryFiltered.map((p: any) => ({
       user_id: userId,
       source: "apify_gmaps",
       enrichment_job_id: job.id,
@@ -736,7 +759,7 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
     await supabase.from("enrichment_jobs")
       .update({ status: "done", progress: 100, leads_created: created }).eq("id", job.id);
 
-    return { ...job, status: "done", leads_created: created };
+    return { ...job, status: "done", leads_created: created, rejected_category: rejectedByCategory };
   });
 
 // Enriquecer em lote leads com CNPJ e sem QSA salvo
