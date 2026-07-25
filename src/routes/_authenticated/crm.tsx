@@ -290,6 +290,38 @@ function EmptyCol({ text = "Sem leads nesta etapa." }: { text?: string }) {
   return <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-muted-foreground">{text}</div>;
 }
 
+/* ---------------- Status accents & legend ---------------- */
+
+const STATUS_ACCENTS: Record<string, { border: string; dot: string; label: string }> = {
+  followup:          { border: "border-l-violet-500",  dot: "bg-violet-500",  label: "Follow-up" },
+  meeting_scheduled: { border: "border-l-emerald-500", dot: "bg-emerald-500", label: "Reunião agendada" },
+  gatekeeper:        { border: "border-l-blue-500",    dot: "bg-blue-500",    label: "Ponte/Secretária" },
+  callback:          { border: "border-l-amber-500",   dot: "bg-amber-500",   label: "Retornar depois" },
+  not_interested:    { border: "border-l-rose-500",    dot: "bg-rose-500",    label: "Sem interesse" },
+  no_answer:         { border: "border-l-slate-400",   dot: "bg-slate-400",   label: "Não atendeu" },
+};
+
+function accentFor(lead: any): string {
+  if (lead.followup_at && new Date(lead.followup_at).getTime() > 0) return STATUS_ACCENTS.followup.border;
+  const s = String(lead.status ?? "");
+  return STATUS_ACCENTS[s]?.border ?? "border-l-border";
+}
+
+function StatusLegend() {
+  const items = ["followup","meeting_scheduled","gatekeeper","callback","not_interested","no_answer"];
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-full border border-[color:var(--border-subtle)] bg-white/60 px-4 py-2 text-[11px] text-muted-foreground backdrop-blur-xl">
+      <span className="font-medium uppercase tracking-widest">Legenda</span>
+      {items.map((k) => (
+        <span key={k} className="inline-flex items-center gap-1.5">
+          <span className={`h-2 w-2 rounded-full ${STATUS_ACCENTS[k].dot}`} />
+          {STATUS_ACCENTS[k].label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function LeadCard({ lead, onOpen, onMove, onCloserAction, showSdrActions, showCloserActions }: {
   lead: any; onOpen: () => void;
   onMove?: (s: string) => void; onCloserAction?: (a: "held" | "no_show" | "won" | "reschedule") => void;
