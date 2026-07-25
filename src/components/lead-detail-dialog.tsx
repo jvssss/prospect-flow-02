@@ -201,3 +201,114 @@ function ReEnrichButton({ leadId }: { leadId: string }) {
     </Button>
   );
 }
+
+const OUTCOME_META: Record<string, { label: string; icon: any; tone: string }> = {
+  no_answer:         { label: "Não atendeu",         icon: VoicemailIcon, tone: "border-slate-300 bg-slate-50 text-slate-700" },
+  gatekeeper:        { label: "Ponte / Secretária",  icon: PhoneOff,      tone: "border-blue-200 bg-blue-50 text-blue-700" },
+  not_interested:    { label: "Sem interesse",       icon: PhoneOff,      tone: "border-rose-200 bg-rose-50 text-rose-700" },
+  callback:          { label: "Retornar depois",     icon: CalendarClock, tone: "border-amber-200 bg-amber-50 text-amber-700" },
+  meeting_scheduled: { label: "Reunião agendada",    icon: CalendarClock, tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+};
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.round(diff / 60000);
+  if (m < 1) return "agora";
+  if (m < 60) return `há ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.round(h / 24);
+  if (d < 30) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function CallHistory({ leadId, lead }: { leadId: string; lead: any }) {
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ["lead-call-history", leadId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("call_logs")
+        .select("id, outcome, notes, duration_seconds, nome_ponte, scheduled_return_at, created_at")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const totals = {
+    calls: logs.length,
+    decisors: logs.filter((l: any) => ["gatekeeper", "meeting_scheduled", "not_interested"].includes(l.outcome)).length,
+    followups: logs.filter((l: any) => !!l.scheduled_return_at).length,
+  };
+
+  return (
+    <div className="space-y-4">
+      {lead.followup_at && (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+          <div className="text-[10px] font-medium uppercase tracking-widest opacity-80">Follow-up ativo</div>
+          <div className="mt-1 font-semibold">
+            {new Date(lead.followup_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+            {lead.proprietario ? ` · com ${lead.proprietario}` : ""}
+          </div>
+          {lead.followup_notes && <p className="mt-1 text-xs opacity-90">{lead.followup_notes}</p>}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-2">
+        <MiniStat label="Tentativas" value={totals.calls} />
+        <MiniStat label="Decisores tocados" value={totals.decisors} />
+        <MiniStat label="Retornos agendados" value={totals.followups} />
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">Carregando histórico…</div>
+      ) : logs.length === 0 ? (
+        <Empty text="Nenhuma ligação registrada ainda." />
+      ) : (
+        <ol className="relative ml-3 space-y-3 border-l border-border pl-5">
+          {logs.map((l: any) => {
+            const meta = OUTCOME_META[l.outcome] ?? { label: l.outcome, icon: PhoneIcon, tone: "border-border bg-muted/40 text-foreground" };
+            const Icon = meta.icon;
+            const dur = l.duration_seconds ? `${Math.floor(l.duration_seconds / 60)}m${String(l.duration_seconds % 60).padStart(2, "0")}s` : null;
+            return (
+              <li key={l.id} className="relative">
+                <span className={`absolute -left-[27px] top-2 grid h-5 w-5 place-items-center rounded-full border-2 ${meta.tone}`}>
+                  <Icon className="h-2.5 w-2.5" />
+                </span>
+                <div className={`rounded-2xl border p-3 ${meta.tone}`}>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="font-semibold">{meta.label}</span>
+                    <span className="text-[11px] opacity-80">
+                      {timeAgo(l.created_at)} · {new Date(l.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                  </div>
+                  {(l.nome_ponte || dur) && (
+                    <div className="mt-1 flex flex-wrap gap-3 text-[11px] opacity-80">
+                      {l.nome_ponte && <span>🛎 {l.nome_ponte}</span>}
+                      {dur && <span>⏱ {dur}</span>}
+                    </div>
+                  )}
+                  {l.notes && <p className="mt-2 whitespace-pre-wrap text-sm">{l.notes}</p>}
+                  {l.scheduled_return_at && (
+                    <p className="mt-1 text-xs opacity-80">Retorno combinado: {new Date(l.scheduled_return_at).toLocaleString("pt-BR")}</p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-border bg-background p-3 text-center">
+      <div className="text-2xl font-bold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{label}</div>
+    </div>
+  );
+}
