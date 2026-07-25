@@ -420,6 +420,12 @@ function Cockpit() {
                 <div>
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">{lead.razao_social ?? "Sem razão social"}</p>
                   <h2 className="mt-1 text-3xl tracking-tight">{lead.nome_fantasia ?? lead.razao_social ?? "Lead"}</h2>
+                  {lead.followup_at && (
+                    <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                      🔁 Follow-up{lead.proprietario ? ` com ${lead.proprietario}` : ""} · {new Date(lead.followup_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {lead.followup_notes ? <span className="ml-1 font-normal opacity-80">· {lead.followup_notes}</span> : null}
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                     {lead.bairro && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{lead.bairro}{lead.cidade ? ` · ${lead.cidade}` : ""}</span>}
                     {lead.capital_social ? <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Cap. {formatBRL(Number(lead.capital_social))}</span> : null}
