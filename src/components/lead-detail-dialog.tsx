@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPhoneBR } from "@/lib/goldenMath";
 import { enrichLeadCnpj } from "@/lib/enrichment.functions";
+import { supabase } from "@/integrations/supabase/client";
 import {
   MapPin, User, Phone, Building2, Calendar, Sparkles, AlertTriangle, ArrowRight, RefreshCw, Loader2,
-  MessageSquare, Target as TargetIcon, DollarSign, Users2,
+  MessageSquare, Target as TargetIcon, DollarSign, Users2, History, PhoneOff, VoicemailIcon, CalendarClock, Phone as PhoneIcon,
 } from "lucide-react";
 
 export function LeadDetailDialog({ lead, open, onOpenChange }: { lead: any | null; open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -59,6 +60,7 @@ export function LeadDetailDialog({ lead, open, onOpenChange }: { lead: any | nul
           <Tabs defaultValue="info" className="mt-4">
             <TabsList className="rounded-full">
               <TabsTrigger value="info" className="rounded-full">Visão geral</TabsTrigger>
+              <TabsTrigger value="history" className="rounded-full">Histórico</TabsTrigger>
               <TabsTrigger value="qual" className="rounded-full">Qualificação</TabsTrigger>
               <TabsTrigger value="closer" className="rounded-full">Closer</TabsTrigger>
             </TabsList>
@@ -75,6 +77,10 @@ export function LeadDetailDialog({ lead, open, onOpenChange }: { lead: any | nul
               {lead.followup_at && (
                 <Info icon={Calendar} label="Follow-up" value={`${new Date(lead.followup_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${lead.followup_notes ? " · " + lead.followup_notes : ""}`} full />
               )}
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-4">
+              <CallHistory leadId={lead.id} lead={lead} />
             </TabsContent>
 
             <TabsContent value="qual" className="mt-4">
