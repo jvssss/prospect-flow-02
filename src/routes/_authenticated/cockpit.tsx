@@ -124,13 +124,37 @@ function Cockpit() {
     queryKey: ["cockpit-queue", city],
     enabled: !!city,
     queryFn: async () => {
+      // Busca um lote e ordena por prioridade em memória:
+      //  1) follow-up marcado (mais próximo primeiro)
+      //  2) callback vencido (retorno_agendado_em <= agora)
+      //  3) nunca ligado (last_call_at == null)
+      //  4) resto por last_call_at asc
       const { data } = await supabase.from("leads").select("*")
         .eq("cidade", city)
         .in("status", ["new", "no_answer", "gatekeeper", "callback"])
         .order("last_call_at", { ascending: true, nullsFirst: true })
         .order("id", { ascending: true })
-        .limit(1);
-      return data ?? [];
+        .limit(30);
+      const now = Date.now();
+      const rows = (data ?? []).slice();
+      const priority = (l: any) => {
+        if (l.followup_at) return 0;
+        if (l.retorno_agendado_em && new Date(l.retorno_agendado_em).getTime() <= now) return 1;
+        if (!l.last_call_at) return 2;
+        return 3;
+      };
+      const sortKey = (l: any) => {
+        if (l.followup_at) return new Date(l.followup_at).getTime();
+        if (l.retorno_agendado_em) return new Date(l.retorno_agendado_em).getTime();
+        if (l.last_call_at) return new Date(l.last_call_at).getTime();
+        return 0;
+      };
+      rows.sort((a, b) => {
+        const pa = priority(a), pb = priority(b);
+        if (pa !== pb) return pa - pb;
+        return sortKey(a) - sortKey(b);
+      });
+      return rows.slice(0, 1);
     },
   });
 
