@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
   Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned, Sparkles,
-  History,
+  History, Clock,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,6 +52,37 @@ function toDatetimeLocal(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const DAY_PT: Record<string, string> = {
+  monday: "Segunda", tuesday: "Terça", wednesday: "Quarta", thursday: "Quinta",
+  friday: "Sexta", saturday: "Sábado", sunday: "Domingo",
+  "segunda-feira": "Segunda", "terça-feira": "Terça", "quarta-feira": "Quarta",
+  "quinta-feira": "Quinta", "sexta-feira": "Sexta", sábado: "Sábado", domingo: "Domingo",
+};
+
+const WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+
+function normalizeHours(raw: unknown): { day: string; hours: string }[] {
+  if (!raw) return [];
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "object"
+      ? Object.entries(raw as Record<string, unknown>).map(([day, hours]) => ({ day, hours }))
+      : [];
+  const out = list
+    .map((it: any) => {
+      const d = String(it?.day ?? "").trim();
+      const h = String(it?.hours ?? it?.value ?? "").trim();
+      if (!d) return null;
+      return { day: DAY_PT[d.toLowerCase()] ?? d, hours: h || "—" };
+    })
+    .filter(Boolean) as { day: string; hours: string }[];
+  return out.sort((a, b) => WEEK_ORDER.indexOf(a.day) - WEEK_ORDER.indexOf(b.day));
+}
+
+function todayPt(): string {
+  return WEEK_ORDER[(new Date().getDay() + 6) % 7];
 }
 
 function timeAgoBR(iso: string): string {
@@ -674,6 +705,43 @@ function Cockpit() {
                   <SkipForward className="mr-2 h-4 w-4" /> Pular por agora
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
+            <CardContent className="p-6">
+              <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" /> Horário de funcionamento
+              </p>
+              {(() => {
+                const hours = normalizeHours((lead as any)?.opening_hours);
+                if (!hours.length) {
+                  return (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Sem horário informado no Google Maps para este lead.
+                    </p>
+                  );
+                }
+                const today = todayPt();
+                return (
+                  <div className="mt-3 space-y-1">
+                    {hours.map((h) => {
+                      const isToday = h.day === today;
+                      return (
+                        <div
+                          key={h.day}
+                          className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-sm ${
+                            isToday ? "bg-primary/10 font-semibold text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          <span>{h.day}{isToday ? " · hoje" : ""}</span>
+                          <span className="tabular-nums">{h.hours}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
           </div>

@@ -217,6 +217,7 @@ export type Database = {
           nome_fantasia: string | null
           nome_ponte: string | null
           notas: string | null
+          opening_hours: Json | null
           pipeline_stage: string
           proprietario: string | null
           qsa: Json | null
@@ -261,6 +262,7 @@ export type Database = {
           nome_fantasia?: string | null
           nome_ponte?: string | null
           notas?: string | null
+          opening_hours?: Json | null
           pipeline_stage?: string
           proprietario?: string | null
           qsa?: Json | null
@@ -305,6 +307,7 @@ export type Database = {
           nome_fantasia?: string | null
           nome_ponte?: string | null
           notas?: string | null
+          opening_hours?: Json | null
           pipeline_stage?: string
           proprietario?: string | null
           qsa?: Json | null

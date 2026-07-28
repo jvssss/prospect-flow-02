@@ -740,6 +740,7 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       website: p.website ?? null,
       google_rating: p.totalScore ?? null,
       google_reviews: p.reviewsCount ?? null,
+      opening_hours: p.openingHours ?? null,
       cnpj: null as string | null,
     })).filter((r) => r.nome_fantasia);
 
