@@ -151,6 +151,11 @@ function Cockpit() {
     },
   });
 
+  // Leads já tratados nesta sessão (desfecho registrado ou pulados):
+  // nunca voltam a aparecer até recarregar a página / trocar de cidade.
+  const handledIds = useRef<Set<string>>(new Set());
+  useEffect(() => { handledIds.current = new Set(); }, [city]);
+
   const { data: leadQueue, refetch: refetchQueue } = useQuery({
     queryKey: ["cockpit-queue", city],
     enabled: !!city,
@@ -185,7 +190,7 @@ function Cockpit() {
         if (pa !== pb) return pa - pb;
         return sortKey(a) - sortKey(b);
       });
-      return rows.slice(0, 1);
+      return rows.filter((l: any) => !handledIds.current.has(l.id)).slice(0, 1);
     },
   });
 
@@ -363,7 +368,8 @@ function Cockpit() {
     qc.invalidateQueries({ queryKey: ["leads"] });
     qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
     qc.invalidateQueries({ queryKey: ["cockpit-lead-history", lead.id] });
-    refetchQueue();
+    handledIds.current.add(lead.id);
+    await refetchQueue();
   }
 
   useEffect(() => {
@@ -698,8 +704,15 @@ function Cockpit() {
                   className="mt-2 rounded-2xl text-muted-foreground"
                   onClick={async () => {
                     if (!lead) return;
-                    await supabase.from("leads").update({ last_call_at: new Date().toISOString() }).eq("id", lead.id);
-                    refetchQueue();
+                    const skipped = lead.id;
+                    handledIds.current.add(skipped);
+                    const { error } = await supabase
+                      .from("leads")
+                      .update({ last_call_at: new Date().toISOString() })
+                      .eq("id", skipped);
+                    if (error) return toast.error(error.message);
+                    await refetchQueue();
+                    toast("Lead pulado", { description: "Ele volta na próxima sessão." });
                   }}
                 >
                   <SkipForward className="mr-2 h-4 w-4" /> Pular por agora
