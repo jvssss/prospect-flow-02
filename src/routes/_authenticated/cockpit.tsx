@@ -707,6 +707,43 @@ function Cockpit() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="rounded-3xl border-[color:var(--border-subtle)] bg-white/70 shadow-[var(--shadow-glass)] backdrop-blur-xl">
+            <CardContent className="p-6">
+              <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" /> Horário de funcionamento
+              </p>
+              {(() => {
+                const hours = normalizeHours((lead as any)?.opening_hours);
+                if (!hours.length) {
+                  return (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Sem horário informado no Google Maps para este lead.
+                    </p>
+                  );
+                }
+                const today = todayPt();
+                return (
+                  <div className="mt-3 space-y-1">
+                    {hours.map((h) => {
+                      const isToday = h.day === today;
+                      return (
+                        <div
+                          key={h.day}
+                          className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-sm ${
+                            isToday ? "bg-primary/10 font-semibold text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          <span>{h.day}{isToday ? " · hoje" : ""}</span>
+                          <span className="tabular-nums">{h.hours}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
           </div>
         </div>
       )}
