@@ -704,8 +704,15 @@ function Cockpit() {
                   className="mt-2 rounded-2xl text-muted-foreground"
                   onClick={async () => {
                     if (!lead) return;
-                    await supabase.from("leads").update({ last_call_at: new Date().toISOString() }).eq("id", lead.id);
-                    refetchQueue();
+                    const skipped = lead.id;
+                    handledIds.current.add(skipped);
+                    const { error } = await supabase
+                      .from("leads")
+                      .update({ last_call_at: new Date().toISOString() })
+                      .eq("id", skipped);
+                    if (error) return toast.error(error.message);
+                    await refetchQueue();
+                    toast("Lead pulado", { description: "Ele volta na próxima sessão." });
                   }}
                 >
                   <SkipForward className="mr-2 h-4 w-4" /> Pular por agora
