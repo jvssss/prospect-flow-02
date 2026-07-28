@@ -151,6 +151,11 @@ function Cockpit() {
     },
   });
 
+  // Leads já tratados nesta sessão (desfecho registrado ou pulados):
+  // nunca voltam a aparecer até recarregar a página / trocar de cidade.
+  const handledIds = useRef<Set<string>>(new Set());
+  useEffect(() => { handledIds.current = new Set(); }, [city]);
+
   const { data: leadQueue, refetch: refetchQueue } = useQuery({
     queryKey: ["cockpit-queue", city],
     enabled: !!city,
@@ -185,7 +190,7 @@ function Cockpit() {
         if (pa !== pb) return pa - pb;
         return sortKey(a) - sortKey(b);
       });
-      return rows.slice(0, 1);
+      return rows.filter((l: any) => !handledIds.current.has(l.id)).slice(0, 1);
     },
   });
 
