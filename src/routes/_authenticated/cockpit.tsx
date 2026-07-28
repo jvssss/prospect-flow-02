@@ -54,6 +54,37 @@ function toDatetimeLocal(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const DAY_PT: Record<string, string> = {
+  monday: "Segunda", tuesday: "Terça", wednesday: "Quarta", thursday: "Quinta",
+  friday: "Sexta", saturday: "Sábado", sunday: "Domingo",
+  "segunda-feira": "Segunda", "terça-feira": "Terça", "quarta-feira": "Quarta",
+  "quinta-feira": "Quinta", "sexta-feira": "Sexta", sábado: "Sábado", domingo: "Domingo",
+};
+
+const WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+
+function normalizeHours(raw: unknown): { day: string; hours: string }[] {
+  if (!raw) return [];
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "object"
+      ? Object.entries(raw as Record<string, unknown>).map(([day, hours]) => ({ day, hours }))
+      : [];
+  const out = list
+    .map((it: any) => {
+      const d = String(it?.day ?? "").trim();
+      const h = String(it?.hours ?? it?.value ?? "").trim();
+      if (!d) return null;
+      return { day: DAY_PT[d.toLowerCase()] ?? d, hours: h || "—" };
+    })
+    .filter(Boolean) as { day: string; hours: string }[];
+  return out.sort((a, b) => WEEK_ORDER.indexOf(a.day) - WEEK_ORDER.indexOf(b.day));
+}
+
+function todayPt(): string {
+  return WEEK_ORDER[(new Date().getDay() + 6) % 7];
+}
+
 function timeAgoBR(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.round(diff / 60000);
