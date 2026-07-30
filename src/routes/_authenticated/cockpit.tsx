@@ -745,11 +745,6 @@ function Cockpit() {
                     if (!lead) return;
                     const skipped = lead.id;
                     handledIds.current.add(skipped);
-                    const { error } = await supabase
-                      .from("leads")
-                      .update({ last_call_at: new Date().toISOString() })
-                      .eq("id", skipped);
-                    if (error) return toast.error(error.message);
                     await refetchQueue();
                     toast("Lead pulado", { description: "Ele volta na próxima sessão." });
                   }}
