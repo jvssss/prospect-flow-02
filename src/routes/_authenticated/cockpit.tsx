@@ -160,19 +160,38 @@ function Cockpit() {
     queryKey: ["cockpit-queue", city],
     enabled: !!city,
     queryFn: async () => {
-      // Busca um lote e ordena por prioridade em memória:
+      // Busca prioritários (follow-up / retorno vencido) + fila normal e
+      // ordena por prioridade em memória:
       //  1) follow-up marcado (mais próximo primeiro)
       //  2) callback vencido (retorno_agendado_em <= agora)
       //  3) nunca ligado (last_call_at == null)
       //  4) resto por last_call_at asc
-      const { data } = await supabase.from("leads").select("*")
-        .eq("cidade", city)
-        .in("status", ["new", "no_answer", "gatekeeper", "callback"])
-        .order("last_call_at", { ascending: true, nullsFirst: true })
-        .order("id", { ascending: true })
-        .limit(30);
+      const nowIso = new Date().toISOString();
+      const statuses = ["new", "no_answer", "gatekeeper", "callback"];
+      const [followRes, callbackRes, normalRes] = await Promise.all([
+        supabase.from("leads").select("*")
+          .eq("cidade", city).in("status", statuses)
+          .not("followup_at", "is", null)
+          .order("followup_at", { ascending: true }).limit(50),
+        supabase.from("leads").select("*")
+          .eq("cidade", city).in("status", statuses)
+          .not("retorno_agendado_em", "is", null)
+          .lte("retorno_agendado_em", nowIso)
+          .order("retorno_agendado_em", { ascending: true }).limit(50),
+        supabase.from("leads").select("*")
+          .eq("cidade", city).in("status", statuses)
+          .order("last_call_at", { ascending: true, nullsFirst: true })
+          .order("id", { ascending: true })
+          .limit(30),
+      ]);
       const now = Date.now();
-      const rows = (data ?? []).slice();
+      const seen = new Set<string>();
+      const rows: any[] = [];
+      for (const r of [...(followRes.data ?? []), ...(callbackRes.data ?? []), ...(normalRes.data ?? [])]) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        rows.push(r);
+      }
       const priority = (l: any) => {
         if (l.followup_at) return 0;
         if (l.retorno_agendado_em && new Date(l.retorno_agendado_em).getTime() <= now) return 1;
