@@ -331,10 +331,21 @@ function Cockpit() {
     setFollowupNotes((lead?.followup_notes as string | null) ?? "");
     setReturnAt("");
     setCallNotes("");
-  }, [lead?.id, lead?.nome_ponte, lead?.proprietario, lead?.followup_at, lead?.followup_notes]);
+    // Só reseta quando o lead REALMENTE muda — atualizações do enriquecimento
+    // JIT no cache não podem apagar o que o SDR já digitou.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
+
+  // Refs espelhando os inputs: garantem que o desfecho grave o valor atual
+  // mesmo se um re-render inesperado limpar o state.
+  const fieldsRef = useRef({ nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes });
+  useEffect(() => {
+    fieldsRef.current = { nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes };
+  }, [nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes]);
 
   async function logOutcome(o: Outcome) {
     if (!lead) return;
+    const f = fieldsRef.current;
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const durationSeconds = Math.max(1, Math.floor((Date.now() - startedAt.current) / 1000));
