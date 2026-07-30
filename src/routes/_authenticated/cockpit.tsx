@@ -406,6 +406,7 @@ function Cockpit() {
     qc.invalidateQueries({ queryKey: ["leads"] });
     qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
     qc.invalidateQueries({ queryKey: ["cockpit-lead-history", lead.id] });
+    qc.invalidateQueries({ queryKey: ["lead-call-history", lead.id] });
     handledIds.current.add(lead.id);
     await refetchQueue();
   }
