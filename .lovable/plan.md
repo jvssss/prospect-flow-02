@@ -1,44 +1,38 @@
-## Diagnóstico (verificado no código)
+## Diagnóstico (verificado no banco e no código)
 
-Em `src/routes/_authenticated/cockpit.tsx > logOutcome` (linhas 209–271), ao clicar num desfecho o app **já salva tudo**:
+**1. Follow-ups não vêm primeiro em Ipatinga**
+Ipatinga tem 120 leads, sendo 2 com `followup_at` preenchido (ambos com status elegível). Em `src/routes/_authenticated/cockpit.tsx` (linhas 159–195) a fila busca apenas **os 30 primeiros** leads ordenados por `last_call_at asc` e só depois ordena por prioridade **em memória**. Como os dois leads de follow-up já foram ligados (têm `last_call_at` recente), eles caem no fim da ordenação do banco e nunca entram nesse lote de 30 — logo, a priorização em memória nunca os enxerga.
 
-- `call_logs` recebe `outcome`, `duration_seconds`, `nome_ponte`, `scheduled_return_at` e `notes` (formato `Decisor: X · <observações>`).
-- `leads` recebe `status`, `pipeline_stage`, `last_call_at`, e — quando preenchidos — `nome_ponte`, `proprietario` (nome do decisor), `retorno_agendado_em`, `meeting_at`, `followup_at`, `followup_notes`.
+**2. Observações da ligação somem / histórico da Noêmia vazio**
+O `call_log` da Auto Escola Noêmia (hoje, 12:15:57) foi gravado com `notes = null` e `nome_ponte = null`. Causa: o `useEffect` da linha 300 tem como dependências `lead.nome_ponte`, `lead.proprietario`, `lead.followup_at`, `lead.followup_notes`. O enriquecimento JIT (linha 280–292) grava o lead atualizado no cache com `qc.setQueryData` — quando ele preenche `proprietario`, a dependência muda, o efeito roda de novo e executa `setCallNotes("")` / `setNomePonte(...)`, **apagando o que o SDR já tinha digitado**. Ao clicar no desfecho, os campos já estavam vazios → log sem observações.
 
-O que dá a sensação de "não salvou" é que, logo depois, o `refetchQueue()` puxa o **próximo lead** e o `useEffect([lead?.id])` (linha 204) zera os campos. Os dados estão no banco — só não voltam a aparecer na tela.
+**3. Efeito colateral encontrado**: o botão "Pular por agora" grava `last_call_at` sem criar `call_log`. Isso empurra leads nunca trabalhados para o fim da fila e explica dezenas de leads de Ipatinga com `last_call_at` de hoje e status `new`.
 
-E hoje, se você voltar ao mesmo lead depois, **nada é pré-carregado** nem exibido: os inputs iniciam vazios e não há histórico visível.
+## O que mudar (apenas `src/routes/_authenticated/cockpit.tsx`)
 
-## O que mudar (só `src/routes/_authenticated/cockpit.tsx`)
+### A. Fila: buscar follow-ups explicitamente
+Trocar a busca única de 30 linhas por duas consultas paralelas, unidas antes da ordenação por prioridade:
+1. **Prioritários**: leads da cidade com status elegível e (`followup_at not null` **ou** `retorno_agendado_em <= agora`), ordenados por essas datas asc, limite 50.
+2. **Fila normal**: a consulta atual (limite 30).
+Mesclar sem duplicar por `id`, aplicar a função de prioridade existente, filtrar `handledIds` e pegar o primeiro. Assim um follow-up sempre aparece antes, mesmo que a base tenha centenas de leads.
 
-1. **Buscar histórico do lead atual** com uma nova query `["cockpit-lead-history", lead.id]`:
-   - `call_logs` do `lead_id`, ordenado por `created_at desc`, limit 5 — para mostrar histórico e pegar o último desfecho.
-   - Reaproveitar `lead.nome_ponte`, `lead.proprietario`, `lead.followup_notes`, `lead.followup_at`, `lead.retorno_agendado_em` que já vêm na query da fila.
+### B. Não apagar o que o usuário digitou
+- Reduzir as dependências do `useEffect` de reset para **apenas `lead?.id`** (o pré-preenchimento continua lendo os campos do lead, mas só quando o lead realmente muda).
+- No callback do JIT, ao fazer `setQueryData`, **preservar o lead em foco**: atualizar apenas campos de enriquecimento (`proprietario`, `socios`, `cnpj`, `capital_social`, `qsa`, `enrichment_status`, `opening_hours`, `email`, `website`) e nunca sobrescrever `nome_ponte` / `followup_*`.
+- Como rede de segurança, em `logOutcome` ler os valores atuais dos inputs a partir de refs sincronizados com o state, evitando gravar `notes: null` caso algum re-render limpe o campo.
 
-2. **Novo card "Histórico deste lead"** na coluna direita, acima do bloco de desfechos:
-   - Último desfecho (label + ícone + quando, ex.: "Ponte / Secretária · há 2 dias").
-   - Última observação salva (`notes` do call_log mais recente).
-   - Contador: "N ligações registradas".
-   - Lista compacta das últimas 3–5 tentativas (data + desfecho + trecho da nota).
-   - Se nunca houve ligação: "Primeiro contato com este lead."
+### C. Histórico visível após registrar o desfecho
+- Depois de salvar, além de invalidar `["cockpit-lead-history", lead.id]`, invalidar também `["lead-call-history", lead.id]` (usado pelo diálogo do CRM) para a jornada do lead aparecer atualizada no card do CRM.
+- Manter o card "Histórico deste lead" já existente; ele passará a mostrar corretamente as observações porque elas deixarão de ser apagadas.
 
-3. **Pré-preencher os inputs ao carregar o lead** (ajustar o `useEffect` da linha 204):
-   - `nomePonte` ← `lead.nome_ponte ?? ""`
-   - `nomeDecisor` ← `lead.proprietario ?? ""` (só quando não veio de sócio/QSA — hoje `proprietario` é usado como decisor manual)
-   - `followupAt` ← `lead.followup_at` formatado para `datetime-local` (se houver)
-   - `followupNotes` ← `lead.followup_notes ?? ""`
-   - `callNotes` continua **vazio** (cada ligação = observação nova; a anterior fica visível no card de histórico).
-   - `returnAt` continua vazio (agendamento é decisão da nova ligação).
-
-4. **Após salvar desfecho**: invalidar também `["cockpit-lead-history", lead.id]` para o próximo lead já vir com seu próprio histórico atualizado.
+### D. Pular sem sujar a fila
+"Pular por agora" deixa de gravar `last_call_at` (que é reservado para ligações reais) e passa a apenas marcar o lead como tratado na sessão (`handledIds`) + refetch. Isso mantém a ordenação da fila coerente.
 
 ## Fora do escopo
-
-- Nenhuma mudança de schema (colunas `nome_ponte`, `followup_at`, `followup_notes`, `retorno_agendado_em` já existem em `leads`; `call_logs.notes` já guarda decisor+observações).
-- Sem mexer em CRM, enriquecimento, fila ou métricas diárias.
+- Nenhuma mudança de schema.
+- Sem alterações no enriquecimento, CRM Kanban ou métricas diárias.
 
 ## Verificação
-
-- Preencher ponte + observações, clicar em desfecho → conferir toast e que o lead sai da fila.
-- Voltar ao mesmo lead (mudar cidade e voltar, ou reabrir depois): os campos "Nome da ponte" e "Nome do decisor" devem vir preenchidos; o card de histórico deve mostrar o último desfecho + observação salva.
-- Rodar 2 ligações no mesmo lead (ex.: "Não atendeu" → depois "Ponte"): a segunda vez deve mostrar a primeira no histórico.
+- Abrir Modo Foco em Ipatinga: o primeiro lead deve ser um dos 2 com follow-up marcado.
+- Digitar "Nome da ponte" + observações num lead sem proprietário (que dispara o JIT) e aguardar o enriquecimento: os campos digitados devem permanecer.
+- Clicar num desfecho e reabrir o lead pelo CRM: o `call_log` deve conter decisor + observações, e a aba Histórico deve mostrar a nova ligação.
