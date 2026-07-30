@@ -363,15 +363,15 @@ function Cockpit() {
       pipeline_stage: stageMap[o],
       last_call_at: new Date().toISOString(),
     };
-    if (nomePonte) leadUpdate.nome_ponte = nomePonte;
-    if ((o === "callback" || o === "meeting_scheduled") && returnAt) {
-      leadUpdate.retorno_agendado_em = new Date(returnAt).toISOString();
-      if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(returnAt).toISOString();
+    if (f.nomePonte) leadUpdate.nome_ponte = f.nomePonte;
+    if ((o === "callback" || o === "meeting_scheduled") && f.returnAt) {
+      leadUpdate.retorno_agendado_em = new Date(f.returnAt).toISOString();
+      if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(f.returnAt).toISOString();
     }
-    if (nomeDecisor) leadUpdate.proprietario = nomeDecisor;
-    if (followupAt) {
-      leadUpdate.followup_at = new Date(followupAt).toISOString();
-      if (followupNotes) leadUpdate.followup_notes = followupNotes;
+    if (f.nomeDecisor) leadUpdate.proprietario = f.nomeDecisor;
+    if (f.followupAt) {
+      leadUpdate.followup_at = new Date(f.followupAt).toISOString();
+      if (f.followupNotes) leadUpdate.followup_notes = f.followupNotes;
     }
     const { error: uErr } = await supabase.from("leads").update(leadUpdate as any).eq("id", lead.id);
     if (uErr) return toast.error(uErr.message);
@@ -379,9 +379,9 @@ function Cockpit() {
     const { error: cErr } = await supabase.from("call_logs").insert({
       user_id: u.user.id, lead_id: lead.id, outcome: o,
       duration_seconds: durationSeconds,
-      nome_ponte: nomePonte || null,
-      scheduled_return_at: returnAt ? new Date(returnAt).toISOString() : null,
-      notes: [nomeDecisor ? `Decisor: ${nomeDecisor}` : null, callNotes || null].filter(Boolean).join(" · ") || null,
+      nome_ponte: f.nomePonte || null,
+      scheduled_return_at: f.returnAt ? new Date(f.returnAt).toISOString() : null,
+      notes: [f.nomeDecisor ? `Decisor: ${f.nomeDecisor}` : null, f.callNotes || null].filter(Boolean).join(" · ") || null,
     });
     if (cErr) return toast.error(cErr.message);
 
