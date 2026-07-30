@@ -160,19 +160,38 @@ function Cockpit() {
     queryKey: ["cockpit-queue", city],
     enabled: !!city,
     queryFn: async () => {
-      // Busca um lote e ordena por prioridade em memória:
+      // Busca prioritários (follow-up / retorno vencido) + fila normal e
+      // ordena por prioridade em memória:
       //  1) follow-up marcado (mais próximo primeiro)
       //  2) callback vencido (retorno_agendado_em <= agora)
       //  3) nunca ligado (last_call_at == null)
       //  4) resto por last_call_at asc
-      const { data } = await supabase.from("leads").select("*")
-        .eq("cidade", city)
-        .in("status", ["new", "no_answer", "gatekeeper", "callback"])
-        .order("last_call_at", { ascending: true, nullsFirst: true })
-        .order("id", { ascending: true })
-        .limit(30);
+      const nowIso = new Date().toISOString();
+      const statuses = ["new", "no_answer", "gatekeeper", "callback"];
+      const [followRes, callbackRes, normalRes] = await Promise.all([
+        supabase.from("leads").select("*")
+          .eq("cidade", city).in("status", statuses)
+          .not("followup_at", "is", null)
+          .order("followup_at", { ascending: true }).limit(50),
+        supabase.from("leads").select("*")
+          .eq("cidade", city).in("status", statuses)
+          .not("retorno_agendado_em", "is", null)
+          .lte("retorno_agendado_em", nowIso)
+          .order("retorno_agendado_em", { ascending: true }).limit(50),
+        supabase.from("leads").select("*")
+          .eq("cidade", city).in("status", statuses)
+          .order("last_call_at", { ascending: true, nullsFirst: true })
+          .order("id", { ascending: true })
+          .limit(30),
+      ]);
       const now = Date.now();
-      const rows = (data ?? []).slice();
+      const seen = new Set<string>();
+      const rows: any[] = [];
+      for (const r of [...(followRes.data ?? []), ...(callbackRes.data ?? []), ...(normalRes.data ?? [])]) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        rows.push(r);
+      }
       const priority = (l: any) => {
         if (l.followup_at) return 0;
         if (l.retorno_agendado_em && new Date(l.retorno_agendado_em).getTime() <= now) return 1;
@@ -287,8 +306,16 @@ function Cockpit() {
           .eq("id", targetId)
           .maybeSingle();
         if (!fresh) return;
+        // Só campos de enriquecimento — nunca sobrescreve o que o SDR digitou.
+        const ENRICH_KEYS = [
+          "proprietario", "socios", "qsa", "cnpj", "capital_social", "razao_social",
+          "data_abertura", "enrichment_status", "opening_hours", "email", "website",
+          "google_rating", "google_reviews",
+        ] as const;
+        const patch: Record<string, any> = {};
+        for (const k of ENRICH_KEYS) if ((fresh as any)[k] != null) patch[k] = (fresh as any)[k];
         qc.setQueryData<any[]>(["cockpit-queue", city], (old) =>
-          Array.isArray(old) ? old.map((l) => (l.id === targetId ? { ...l, ...fresh } : l)) : old,
+          Array.isArray(old) ? old.map((l) => (l.id === targetId ? { ...l, ...patch } : l)) : old,
         );
       })
       .catch(() => {})
@@ -304,10 +331,21 @@ function Cockpit() {
     setFollowupNotes((lead?.followup_notes as string | null) ?? "");
     setReturnAt("");
     setCallNotes("");
-  }, [lead?.id, lead?.nome_ponte, lead?.proprietario, lead?.followup_at, lead?.followup_notes]);
+    // Só reseta quando o lead REALMENTE muda — atualizações do enriquecimento
+    // JIT no cache não podem apagar o que o SDR já digitou.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
+
+  // Refs espelhando os inputs: garantem que o desfecho grave o valor atual
+  // mesmo se um re-render inesperado limpar o state.
+  const fieldsRef = useRef({ nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes });
+  useEffect(() => {
+    fieldsRef.current = { nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes };
+  }, [nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes]);
 
   async function logOutcome(o: Outcome) {
     if (!lead) return;
+    const f = fieldsRef.current;
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const durationSeconds = Math.max(1, Math.floor((Date.now() - startedAt.current) / 1000));
@@ -325,15 +363,15 @@ function Cockpit() {
       pipeline_stage: stageMap[o],
       last_call_at: new Date().toISOString(),
     };
-    if (nomePonte) leadUpdate.nome_ponte = nomePonte;
-    if ((o === "callback" || o === "meeting_scheduled") && returnAt) {
-      leadUpdate.retorno_agendado_em = new Date(returnAt).toISOString();
-      if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(returnAt).toISOString();
+    if (f.nomePonte) leadUpdate.nome_ponte = f.nomePonte;
+    if ((o === "callback" || o === "meeting_scheduled") && f.returnAt) {
+      leadUpdate.retorno_agendado_em = new Date(f.returnAt).toISOString();
+      if (o === "meeting_scheduled") leadUpdate.meeting_at = new Date(f.returnAt).toISOString();
     }
-    if (nomeDecisor) leadUpdate.proprietario = nomeDecisor;
-    if (followupAt) {
-      leadUpdate.followup_at = new Date(followupAt).toISOString();
-      if (followupNotes) leadUpdate.followup_notes = followupNotes;
+    if (f.nomeDecisor) leadUpdate.proprietario = f.nomeDecisor;
+    if (f.followupAt) {
+      leadUpdate.followup_at = new Date(f.followupAt).toISOString();
+      if (f.followupNotes) leadUpdate.followup_notes = f.followupNotes;
     }
     const { error: uErr } = await supabase.from("leads").update(leadUpdate as any).eq("id", lead.id);
     if (uErr) return toast.error(uErr.message);
@@ -341,9 +379,9 @@ function Cockpit() {
     const { error: cErr } = await supabase.from("call_logs").insert({
       user_id: u.user.id, lead_id: lead.id, outcome: o,
       duration_seconds: durationSeconds,
-      nome_ponte: nomePonte || null,
-      scheduled_return_at: returnAt ? new Date(returnAt).toISOString() : null,
-      notes: [nomeDecisor ? `Decisor: ${nomeDecisor}` : null, callNotes || null].filter(Boolean).join(" · ") || null,
+      nome_ponte: f.nomePonte || null,
+      scheduled_return_at: f.returnAt ? new Date(f.returnAt).toISOString() : null,
+      notes: [f.nomeDecisor ? `Decisor: ${f.nomeDecisor}` : null, f.callNotes || null].filter(Boolean).join(" · ") || null,
     });
     if (cErr) return toast.error(cErr.message);
 
@@ -368,6 +406,7 @@ function Cockpit() {
     qc.invalidateQueries({ queryKey: ["leads"] });
     qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
     qc.invalidateQueries({ queryKey: ["cockpit-lead-history", lead.id] });
+    qc.invalidateQueries({ queryKey: ["lead-call-history", lead.id] });
     handledIds.current.add(lead.id);
     await refetchQueue();
   }
@@ -706,11 +745,6 @@ function Cockpit() {
                     if (!lead) return;
                     const skipped = lead.id;
                     handledIds.current.add(skipped);
-                    const { error } = await supabase
-                      .from("leads")
-                      .update({ last_call_at: new Date().toISOString() })
-                      .eq("id", skipped);
-                    if (error) return toast.error(error.message);
                     await refetchQueue();
                     toast("Lead pulado", { description: "Ele volta na próxima sessão." });
                   }}
