@@ -306,8 +306,16 @@ function Cockpit() {
           .eq("id", targetId)
           .maybeSingle();
         if (!fresh) return;
+        // Só campos de enriquecimento — nunca sobrescreve o que o SDR digitou.
+        const ENRICH_KEYS = [
+          "proprietario", "socios", "qsa", "cnpj", "capital_social", "razao_social",
+          "data_abertura", "enrichment_status", "opening_hours", "email", "website",
+          "google_rating", "google_reviews",
+        ] as const;
+        const patch: Record<string, any> = {};
+        for (const k of ENRICH_KEYS) if ((fresh as any)[k] != null) patch[k] = (fresh as any)[k];
         qc.setQueryData<any[]>(["cockpit-queue", city], (old) =>
-          Array.isArray(old) ? old.map((l) => (l.id === targetId ? { ...l, ...fresh } : l)) : old,
+          Array.isArray(old) ? old.map((l) => (l.id === targetId ? { ...l, ...patch } : l)) : old,
         );
       })
       .catch(() => {})
