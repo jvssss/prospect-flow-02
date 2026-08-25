@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Target, LogOut, Gauge, KanbanSquare, Users, BarChart3, BookOpen } from "lucide-react";
+import { Target, LogOut, Gauge, ClipboardList, KanbanSquare, Users, BarChart3, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 
 const TABS = [
   { to: "/cockpit", label: "Modo Foco", icon: Gauge },
+  { to: "/demandas", label: "Demandas", icon: ClipboardList },
   { to: "/crm", label: "CRM", icon: KanbanSquare },
   { to: "/leads", label: "Leads", icon: Users },
   { to: "/goals", label: "Números", icon: BarChart3 },

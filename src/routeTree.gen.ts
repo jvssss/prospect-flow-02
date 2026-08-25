@@ -16,6 +16,7 @@ import { Route as AuthenticatedSdrRouteImport } from './routes/_authenticated/sd
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
 import { Route as AuthenticatedDiarioRouteImport } from './routes/_authenticated/diario'
+import { Route as AuthenticatedDemandasRouteImport } from './routes/_authenticated/demandas'
 import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
 import { Route as AuthenticatedCockpitRouteImport } from './routes/_authenticated/cockpit'
 import { Route as AuthenticatedQualifyLeadIdRouteImport } from './routes/_authenticated/qualify.$leadId'
@@ -55,6 +56,11 @@ const AuthenticatedDiarioRoute = AuthenticatedDiarioRouteImport.update({
   path: '/diario',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDemandasRoute = AuthenticatedDemandasRouteImport.update({
+  id: '/demandas',
+  path: '/demandas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCrmRoute = AuthenticatedCrmRouteImport.update({
   id: '/crm',
   path: '/crm',
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/cockpit': typeof AuthenticatedCockpitRoute
   '/crm': typeof AuthenticatedCrmRoute
+  '/demandas': typeof AuthenticatedDemandasRoute
   '/diario': typeof AuthenticatedDiarioRoute
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cockpit': typeof AuthenticatedCockpitRoute
   '/crm': typeof AuthenticatedCrmRoute
+  '/demandas': typeof AuthenticatedDemandasRoute
   '/diario': typeof AuthenticatedDiarioRoute
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/cockpit': typeof AuthenticatedCockpitRoute
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
+  '/_authenticated/demandas': typeof AuthenticatedDemandasRoute
   '/_authenticated/diario': typeof AuthenticatedDiarioRoute
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cockpit'
     | '/crm'
+    | '/demandas'
     | '/diario'
     | '/goals'
     | '/leads'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cockpit'
     | '/crm'
+    | '/demandas'
     | '/diario'
     | '/goals'
     | '/leads'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/cockpit'
     | '/_authenticated/crm'
+    | '/_authenticated/demandas'
     | '/_authenticated/diario'
     | '/_authenticated/goals'
     | '/_authenticated/leads'
@@ -213,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDiarioRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/demandas': {
+      id: '/_authenticated/demandas'
+      path: '/demandas'
+      fullPath: '/demandas'
+      preLoaderRoute: typeof AuthenticatedDemandasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/crm': {
       id: '/_authenticated/crm'
       path: '/crm'
@@ -247,6 +266,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCockpitRoute: typeof AuthenticatedCockpitRoute
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
+  AuthenticatedDemandasRoute: typeof AuthenticatedDemandasRoute
   AuthenticatedDiarioRoute: typeof AuthenticatedDiarioRoute
   AuthenticatedGoalsRoute: typeof AuthenticatedGoalsRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
@@ -258,6 +278,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCockpitRoute: AuthenticatedCockpitRoute,
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
+  AuthenticatedDemandasRoute: AuthenticatedDemandasRoute,
   AuthenticatedDiarioRoute: AuthenticatedDiarioRoute,
   AuthenticatedGoalsRoute: AuthenticatedGoalsRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
