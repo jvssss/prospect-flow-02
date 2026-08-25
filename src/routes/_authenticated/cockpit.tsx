@@ -14,8 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   Phone, PhoneOff, CalendarClock, MessageCircle, SkipForward, VoicemailIcon,
   Timer, Building2, MapPin, ArrowRight, Users2, Star, BarChart3, MapPinned, Sparkles,
-  History, Clock,
+  History, Clock, Trash2, Loader2,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -153,6 +158,8 @@ function Cockpit() {
 
   // Leads já tratados nesta sessão (desfecho registrado ou pulados):
   // nunca voltam a aparecer até recarregar a página / trocar de cidade.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const handledIds = useRef<Set<string>>(new Set());
   useEffect(() => { handledIds.current = new Set(); }, [city]);
 
@@ -411,16 +418,42 @@ function Cockpit() {
     await refetchQueue();
   }
 
+  // Remove o lead da base e avança a fila. A FK call_logs.lead_id é
+  // ON DELETE SET NULL: o histórico de ligações sobrevive, mas fica órfão.
+  async function excluirLead() {
+    if (!lead) return;
+    const id = lead.id;
+    const nome = lead.nome_fantasia ?? lead.razao_social ?? "Lead";
+    setDeleting(true);
+    const { error } = await supabase.from("leads").delete().eq("id", id);
+    setDeleting(false);
+    if (error) return toast.error(error.message);
+
+    setConfirmDelete(false);
+    handledIds.current.add(id);
+    // Sem isso os campos digitados vazam para o próximo lead da fila.
+    setNomePonte(""); setReturnAt(""); setNomeDecisor(""); setCallNotes("");
+    setFollowupAt(""); setFollowupNotes("");
+    await refetchQueue();
+    qc.invalidateQueries({ queryKey: ["leads"] });
+    qc.invalidateQueries({ queryKey: ["crm-leads"] });
+    qc.invalidateQueries({ queryKey: ["cockpit-cities"] });
+    toast.success(`${nome} excluído da base`);
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Sem esta guarda, apertar 1-5 com a confirmação aberta registraria um
+      // desfecho por trás do diálogo, no lead que está prestes a ser excluído.
+      if (confirmDelete) return;
       const o = OUTCOMES.find((x) => x.hotkey === e.key);
       if (o) { e.preventDefault(); logOutcome(o.key); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead?.id, nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes, metrics]);
+  }, [lead?.id, nomePonte, returnAt, nomeDecisor, callNotes, followupAt, followupNotes, metrics, confirmDelete]);
 
   if (!goal) {
     return (
@@ -751,6 +784,45 @@ function Cockpit() {
                 >
                   <SkipForward className="mr-2 h-4 w-4" /> Pular por agora
                 </Button>
+
+                <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="rounded-2xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Excluir lead da base
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="rounded-3xl">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Excluir este lead?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        <b className="text-foreground">
+                          {lead?.nome_fantasia ?? lead?.razao_social ?? "Este lead"}
+                        </b>
+                        {lead?.telefone_1 ? ` · ${formatPhoneBR(lead.telefone_1)}` : ""} será removido
+                        permanentemente da base, e não dá para desfazer. As ligações já registradas
+                        continuam contando nos seus números do dia, mas deixam de aparecer ligadas a
+                        esta empresa.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="rounded-2xl" disabled={deleting}>
+                        Cancelar
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={(e) => { e.preventDefault(); excluirLead(); }}
+                        disabled={deleting}
+                        className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {deleting
+                          ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Excluindo…</>
+                          : "Excluir permanentemente"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>
