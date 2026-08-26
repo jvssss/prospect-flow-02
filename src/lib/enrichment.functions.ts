@@ -1,4 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { matchAutoescola, normCidade, toCnpjaShape, type RfbEstab, type RfbSocio } from "@/lib/rfb-match";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -411,6 +413,52 @@ async function cnpjaSearchByDistrict(
  * Cascata completa: name → phone → CEP → district → SERP.
  * Retorna { detail, cnpj, strategy } ou null. Compartilhada por ingest e JIT.
  */
+/**
+ * Passo 0 da cascata: base local da Receita (`rfb_autoescolas` / `rfb_socios`).
+ * Grátis, instantânea, sem rate limit e sem depender de buscador — que é
+ * justamente o que derrubava o enriquecimento em produção. Devolve o payload no
+ * formato da CNPJá para o restante do pipeline não precisar saber a diferença.
+ */
+async function findNaBaseLocal(
+  nome: string,
+  cidade: string | null,
+  uf: string | null,
+): Promise<{ detail: Record<string, unknown>; cnpj: string } | null> {
+  if (!nome || !cidade) return null;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // rfb_autoescolas e rfb_socios foram criadas fora do agente do Lovable, então
+    // ainda não constam no types.ts gerado. Cast sem o genérico de schema em vez
+    // de editar o arquivo gerado — que seria sobrescrito na próxima regeneração.
+    const db = supabaseAdmin as unknown as SupabaseClient;
+    let q = db
+      .from("rfb_autoescolas")
+      .select("cnpj,cnpj_basico,nome_fantasia,razao_social,cidade,uf,bairro,cep,telefone,ativa")
+      .eq("cidade_norm", normCidade(cidade));
+    const nUf = normalizeUf(uf);
+    if (nUf) q = q.eq("uf", nUf);
+    // Cidade grande chega a algumas centenas de autoescolas; cabe folgado.
+    const { data, error } = await q.limit(1000);
+    if (error || !data?.length) return null;
+
+    const hit = matchAutoescola(nome, cidade, data as unknown as RfbEstab[]);
+    if (!hit) return null;
+
+    const { data: socios } = await db
+      .from("rfb_socios")
+      .select("cnpj_basico,nome,qualificacao")
+      .eq("cnpj_basico", hit.estab.cnpj_basico);
+
+    return {
+      detail: toCnpjaShape(hit.estab, (socios ?? []) as unknown as RfbSocio[]),
+      cnpj: hit.estab.cnpj,
+    };
+  } catch {
+    // Base ainda não carregada ou tabela ausente: segue para a cascata externa.
+    return null;
+  }
+}
+
 async function cascadeFindCompany(row: {
   nome_fantasia?: string | null;
   cidade?: string | null;
@@ -419,11 +467,17 @@ async function cascadeFindCompany(row: {
   endereco?: string | null;
   telefone_1?: string | null;
   telefone_2?: string | null;
-}): Promise<{ detail: any; cnpj: string | null; strategy: "name" | "phone" | "cep" | "district" | "serp" } | null> {
+}): Promise<{ detail: any; cnpj: string | null; strategy: "local" | "name" | "phone" | "cep" | "district" | "serp" } | null> {
   const hasPaid = !!process.env.CNPJA_API_KEY;
   const nome = row.nome_fantasia ?? "";
   const cidade = row.cidade ?? null;
   const uf = row.uf ?? null;
+
+  // 0) Base local da Receita — resolve a maioria antes de gastar chamada externa.
+  if (nome) {
+    const local = await findNaBaseLocal(nome, cidade, uf);
+    if (local) return { detail: local.detail, cnpj: local.cnpj, strategy: "local" };
+  }
 
   // 1) Nome + variantes
   if (hasPaid && nome) {
