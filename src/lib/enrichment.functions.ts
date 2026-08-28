@@ -506,7 +506,16 @@ async function findNaBaseLocal(
     if (nUf) q = q.eq("uf", nUf);
     // Cidade grande chega a algumas centenas de autoescolas; cabe folgado.
     const { data, error } = await q.limit(1000);
-    if (error || !data?.length) return null;
+    if (error || !data?.length) {
+      // Distingue "a base não tem essa cidade carregada" de "tem e não casou".
+      registrarFalhaCnpja(
+        "baseLocal",
+        error
+          ? `erro ao consultar: ${error.message}`
+          : `nenhuma autoescola carregada em ${cidade}/${uf ?? "?"}`,
+      );
+      return null;
+    }
 
     const hit = matchAutoescola(nome, cidade, data as unknown as RfbEstab[]);
     if (!hit) return null;
@@ -539,6 +548,13 @@ async function cascadeFindCompany(row: {
   const nome = row.nome_fantasia ?? "";
   const cidade = row.cidade ?? null;
   const uf = row.uf ?? null;
+
+  // O guarda `hasPaid` abaixo pula as quatro buscas antes de qualquer
+  // requisição sair. Sem registrar aqui, chave ausente no runtime fica
+  // indistinguível de "a CNPJá respondeu e não achou".
+  if (!hasPaid) {
+    registrarFalhaCnpja("cascata", "CNPJA_API_KEY ausente no runtime — as 4 buscas foram puladas");
+  }
 
   // 0) Base local da Receita — resolve a maioria antes de gastar chamada externa.
   if (nome) {
@@ -603,6 +619,10 @@ async function cascadeFindCompany(row: {
       } catch { /* ignore */ }
     }
   }
+  registrarFalhaCnpja(
+    "cascata",
+    `esgotou "${nome.slice(0, 40)}" em ${cidade ?? "?"}/${uf ?? "?"} · paga=${hasPaid}`,
+  );
   return null;
 }
 
