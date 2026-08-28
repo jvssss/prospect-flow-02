@@ -27,6 +27,7 @@ import {
   Ban,
 } from "lucide-react";
 import { formatPhoneBR, whatsappLink } from "@/lib/goldenMath";
+import { LeadProfile } from "@/components/lead-profile";
 import {
   CADENCIA,
   ROTULO_SITUACAO,
@@ -108,6 +109,7 @@ function DisparoPage() {
   const [filtroCanal, setFiltroCanal] = useState("all");
   const [filtroCidade, setFiltroCidade] = useState("all");
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [leadAberto, setLeadAberto] = useState<string | null>(null);
 
   // cadencia_* e a tabela disparos foram criadas fora do agente do Lovable e
   // ainda não constam no types.ts gerado.
@@ -374,7 +376,12 @@ function DisparoPage() {
                     key={l.id}
                     className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-white/60 p-3"
                   >
-                    <div className="min-w-56 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => setLeadAberto(l.id)}
+                      className="min-w-56 flex-1 cursor-pointer text-left"
+                      title="Abrir perfil completo"
+                    >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">
                           {l.nome_fantasia ?? l.razao_social ?? "—"}
@@ -399,7 +406,7 @@ function DisparoPage() {
                           <span className="text-destructive"> (fixo)</span>
                         )}
                       </div>
-                    </div>
+                    </button>
 
                     <div className="text-xs tabular-nums text-muted-foreground">
                       <div>
@@ -470,6 +477,12 @@ function DisparoPage() {
           )}
         </CardContent>
       </Card>
+
+      <LeadProfile
+        leadId={leadAberto}
+        open={!!leadAberto}
+        onOpenChange={(v) => !v && setLeadAberto(null)}
+      />
     </div>
   );
 }
