@@ -195,6 +195,37 @@ async function findCnpjByText(nome: string, cidade?: string | null): Promise<str
 const CNPJA_BASE = "https://api.cnpja.com";
 const CNPJA_OPEN_BASE = "https://open.cnpja.com";
 
+/**
+ * Diagnóstico da CNPJá.
+ *
+ * As buscas abaixo fazem `catch { return [] }`, o que apaga 401 (chave errada),
+ * 402 (sem crédito), 400 (parâmetro inválido) e 403 (plano sem busca) sem deixar
+ * rastro. O enriquecimento roda há um mês em ~20% e ninguém sabe por quê.
+ * Aqui as falhas são acumuladas e gravadas em `public.diagnosticos` ao fim do
+ * lote, para o motivo real aparecer em vez de virar mais um `not_found`.
+ */
+const falhasCnpja: string[] = [];
+function registrarFalhaCnpja(onde: string, detalhe: string) {
+  if (falhasCnpja.length >= 8) return;
+  const msg = `${onde}: ${detalhe}`;
+  if (!falhasCnpja.includes(msg)) falhasCnpja.push(msg);
+}
+
+/** Grava o que a CNPJá respondeu e limpa o acumulador. */
+async function gravarDiagnostico(contexto: string) {
+  if (!falhasCnpja.length) return;
+  const mensagem = falhasCnpja.join(" | ");
+  falhasCnpja.length = 0;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await (supabaseAdmin as unknown as SupabaseClient)
+      .from("diagnosticos")
+      .insert({ contexto, mensagem });
+  } catch {
+    /* diagnóstico nunca pode derrubar o enriquecimento */
+  }
+}
+
 function cnpjaHeaders(): Record<string, string> {
   const key = process.env.CNPJA_API_KEY;
   const h: Record<string, string> = { accept: "application/json", "user-agent": BROWSER_UA };
@@ -231,7 +262,11 @@ async function cnpjaSearchByName(
   cidade?: string | null,
   uf?: string | null,
 ): Promise<any[]> {
-  if (!process.env.CNPJA_API_KEY || !nome) return [];
+  if (!process.env.CNPJA_API_KEY) {
+    registrarFalhaCnpja("buscaPorNome", "CNPJA_API_KEY ausente no runtime");
+    return [];
+  }
+  if (!nome) return [];
   const params = new URLSearchParams();
   params.set("names.in", nome);
   const nUf = normalizeUf(uf ?? null);
@@ -243,7 +278,14 @@ async function cnpjaSearchByName(
       { headers: cnpjaHeaders() },
       12000,
     );
-    if (!res.ok) return [];
+    if (!res.ok) {
+      // O corpo é onde a CNPJá explica o motivo: chave inválida, sem crédito,
+      // parâmetro desconhecido ou plano que não inclui busca. Os params no
+      // registro dizem qual das quatro buscas falhou.
+      const corpo = await res.text().catch(() => "");
+      registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
+      return [];
+    }
     const json: any = await res.json();
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
@@ -251,7 +293,8 @@ async function cnpjaSearchByName(
     if (!cidade) return records;
     // Estrito: se nada bate na cidade alvo, descarta (evita casar homônimo em outra cidade).
     return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
-  } catch {
+  } catch (e) {
+    registrarFalhaCnpja("busca", `exceção: ${String(e).slice(0, 200)}`);
     return [];
   }
 }
@@ -333,7 +376,14 @@ async function cnpjaSearchByPhone(
       { headers: cnpjaHeaders() },
       12000,
     );
-    if (!res.ok) return [];
+    if (!res.ok) {
+      // O corpo é onde a CNPJá explica o motivo: chave inválida, sem crédito,
+      // parâmetro desconhecido ou plano que não inclui busca. Os params no
+      // registro dizem qual das quatro buscas falhou.
+      const corpo = await res.text().catch(() => "");
+      registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
+      return [];
+    }
     const json: any = await res.json();
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
@@ -343,7 +393,8 @@ async function cnpjaSearchByPhone(
   if (!cidade || records.length <= 1) return records;
       const filtered = records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
     return filtered.length > 0 ? filtered : [];
-  } catch {
+  } catch (e) {
+    registrarFalhaCnpja("busca", `exceção: ${String(e).slice(0, 200)}`);
     return [];
   }
 }
@@ -365,14 +416,22 @@ async function cnpjaSearchByPostal(
       { headers: cnpjaHeaders() },
       12000,
     );
-    if (!res.ok) return [];
+    if (!res.ok) {
+      // O corpo é onde a CNPJá explica o motivo: chave inválida, sem crédito,
+      // parâmetro desconhecido ou plano que não inclui busca. Os params no
+      // registro dizem qual das quatro buscas falhou.
+      const corpo = await res.text().catch(() => "");
+      registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
+      return [];
+    }
     const json: any = await res.json();
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
     return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
-  } catch {
+  } catch (e) {
+    registrarFalhaCnpja("busca", `exceção: ${String(e).slice(0, 200)}`);
     return [];
   }
 }
@@ -397,14 +456,22 @@ async function cnpjaSearchByDistrict(
       { headers: cnpjaHeaders() },
       12000,
     );
-    if (!res.ok) return [];
+    if (!res.ok) {
+      // O corpo é onde a CNPJá explica o motivo: chave inválida, sem crédito,
+      // parâmetro desconhecido ou plano que não inclui busca. Os params no
+      // registro dizem qual das quatro buscas falhou.
+      const corpo = await res.text().catch(() => "");
+      registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
+      return [];
+    }
     const json: any = await res.json();
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
     if (!cidade) return records;
     return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
-  } catch {
+  } catch (e) {
+    registrarFalhaCnpja("busca", `exceção: ${String(e).slice(0, 200)}`);
     return [];
   }
 }
@@ -959,6 +1026,10 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
     let inactive = 0;
     // conta rápida dos que viraram inactive nesse lote não é necessária;
     // preferimos expor o total geral pela UI ao invés de derivar aqui.
+
+    // Persiste o que a CNPJá respondeu neste lote. Se ela recusou, o motivo
+    // fica em public.diagnosticos em vez de virar mais um not_found silencioso.
+    await gravarDiagnostico("enrichMissingSocios");
 
     return {
       withCnpj: withCnpj?.length ?? 0,
