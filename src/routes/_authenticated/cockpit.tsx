@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { venceEm } from "@/lib/cadencia";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -365,10 +367,21 @@ function Cockpit() {
       not_interested: "dismissed",
       meeting_scheduled: "scheduled",
     };
+    // Uma ligação aqui também é um toque da cadência. Sem isto o Controle de
+    // Disparo mandaria abordar de novo quem você acabou de atender.
+    const etapaCadencia = ((lead as any).cadencia_etapa ?? 0) + 1;
+    const proximoCadencia = venceEm(etapaCadencia);
+    const statusCadencia =
+      o === "meeting_scheduled" ? "respondeu" : o === "not_interested" ? "encerrada" : "ativa";
+
     const leadUpdate: Record<string, any> = {
       status: meta.status,
       pipeline_stage: stageMap[o],
       last_call_at: new Date().toISOString(),
+      cadencia_etapa: etapaCadencia,
+      cadencia_proximo_em:
+        statusCadencia === "ativa" && proximoCadencia ? proximoCadencia.toISOString() : null,
+      cadencia_status: statusCadencia,
     };
     if (f.nomePonte) leadUpdate.nome_ponte = f.nomePonte;
     if ((o === "callback" || o === "meeting_scheduled") && f.returnAt) {
@@ -391,6 +404,11 @@ function Cockpit() {
       notes: [f.nomeDecisor ? `Decisor: ${f.nomeDecisor}` : null, f.callNotes || null].filter(Boolean).join(" · ") || null,
     });
     if (cErr) return toast.error(cErr.message);
+
+    // Histórico do toque, para o Controle de Disparo mostrar a trilha completa.
+    await (supabase as unknown as SupabaseClient)
+      .from("disparos")
+      .insert({ lead_id: lead.id, user_id: u.user.id, canal: "ligacao", etapa: etapaCadencia });
 
     // upsert daily metric
     const day = todayISO();

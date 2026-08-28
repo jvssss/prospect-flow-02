@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSdrRouteImport } from './routes/_authenticated/sdr'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
+import { Route as AuthenticatedDisparoRouteImport } from './routes/_authenticated/disparo'
 import { Route as AuthenticatedDiarioRouteImport } from './routes/_authenticated/diario'
 import { Route as AuthenticatedDemandasRouteImport } from './routes/_authenticated/demandas'
 import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
@@ -49,6 +50,11 @@ const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
 const AuthenticatedGoalsRoute = AuthenticatedGoalsRouteImport.update({
   id: '/goals',
   path: '/goals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDisparoRoute = AuthenticatedDisparoRouteImport.update({
+  id: '/disparo',
+  path: '/disparo',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDiarioRoute = AuthenticatedDiarioRouteImport.update({
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/crm': typeof AuthenticatedCrmRoute
   '/demandas': typeof AuthenticatedDemandasRoute
   '/diario': typeof AuthenticatedDiarioRoute
+  '/disparo': typeof AuthenticatedDisparoRoute
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/sdr': typeof AuthenticatedSdrRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/crm': typeof AuthenticatedCrmRoute
   '/demandas': typeof AuthenticatedDemandasRoute
   '/diario': typeof AuthenticatedDiarioRoute
+  '/disparo': typeof AuthenticatedDisparoRoute
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/sdr': typeof AuthenticatedSdrRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
   '/_authenticated/demandas': typeof AuthenticatedDemandasRoute
   '/_authenticated/diario': typeof AuthenticatedDiarioRoute
+  '/_authenticated/disparo': typeof AuthenticatedDisparoRoute
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/sdr': typeof AuthenticatedSdrRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/demandas'
     | '/diario'
+    | '/disparo'
     | '/goals'
     | '/leads'
     | '/sdr'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/demandas'
     | '/diario'
+    | '/disparo'
     | '/goals'
     | '/leads'
     | '/sdr'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/_authenticated/crm'
     | '/_authenticated/demandas'
     | '/_authenticated/diario'
+    | '/_authenticated/disparo'
     | '/_authenticated/goals'
     | '/_authenticated/leads'
     | '/_authenticated/sdr'
@@ -218,6 +230,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGoalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/disparo': {
+      id: '/_authenticated/disparo'
+      path: '/disparo'
+      fullPath: '/disparo'
+      preLoaderRoute: typeof AuthenticatedDisparoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/diario': {
       id: '/_authenticated/diario'
       path: '/diario'
@@ -268,6 +287,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
   AuthenticatedDemandasRoute: typeof AuthenticatedDemandasRoute
   AuthenticatedDiarioRoute: typeof AuthenticatedDiarioRoute
+  AuthenticatedDisparoRoute: typeof AuthenticatedDisparoRoute
   AuthenticatedGoalsRoute: typeof AuthenticatedGoalsRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedSdrRoute: typeof AuthenticatedSdrRoute
@@ -280,6 +300,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
   AuthenticatedDemandasRoute: AuthenticatedDemandasRoute,
   AuthenticatedDiarioRoute: AuthenticatedDiarioRoute,
+  AuthenticatedDisparoRoute: AuthenticatedDisparoRoute,
   AuthenticatedGoalsRoute: AuthenticatedGoalsRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedSdrRoute: AuthenticatedSdrRoute,
