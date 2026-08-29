@@ -29,6 +29,7 @@ import {
   Loader2,
   Flame,
   Snowflake,
+  ExternalLink,
 } from "lucide-react";
 import { formatBRL, formatPhoneBR, whatsappLink } from "@/lib/goldenMath";
 import { mensagemAbertura, numeroWhatsapp, venceEm } from "@/lib/cadencia";
@@ -129,11 +130,14 @@ function CampoEditavel({
   rotulo,
   valor,
   tipo,
+  href,
   onSalvar,
 }: {
   rotulo: string;
   valor: string | number | null;
   tipo?: Campo["tipo"];
+  /** Quando presente, mostra um botão de abrir ao lado do rótulo. */
+  href?: string | null;
   onSalvar: (v: string) => Promise<void>;
 }) {
   const [editando, setEditando] = useState(false);
@@ -161,8 +165,21 @@ function CampoEditavel({
 
   return (
     <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-white/60 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {rotulo}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {rotulo}
+        </div>
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir"
+            className="shrink-0 text-muted-foreground transition hover:text-primary"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
       </div>
       {editando ? (
         <div className="mt-1.5 flex items-center gap-1.5">
@@ -203,6 +220,34 @@ function CampoEditavel({
       )}
     </div>
   );
+}
+
+/**
+ * Link de "abrir" por campo. O Maps tem tratamento especial: leads capturados
+ * antes de guardarmos a URL do place caem numa busca por nome + cidade, que
+ * resolve na prática sem precisar rodar o scrape de novo.
+ */
+function hrefDoCampo(chave: string, lead: LeadCompleto): string | null {
+  const bruto = lead[chave];
+  const v = typeof bruto === "string" ? bruto.trim() : "";
+  const comProtocolo = (u: string) => (u.toLowerCase().startsWith("http") ? u : `https://${u}`);
+
+  if (chave === "google_meu_negocio") {
+    if (v) return comProtocolo(v);
+    const busca = [lead.nome_fantasia ?? lead.razao_social, lead.cidade, lead.uf]
+      .filter(Boolean)
+      .join(" ");
+    return busca
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(busca)}`
+      : null;
+  }
+  if (!v) return null;
+  if (chave === "website" || chave === "meta_ads" || chave === "google_ads") return comProtocolo(v);
+  if (chave === "instagram") {
+    return v.startsWith("http") ? v : `https://instagram.com/${v.replace(/^@/, "")}`;
+  }
+  if (chave === "email") return `mailto:${v}`;
+  return null;
 }
 
 export function LeadProfile({
@@ -504,6 +549,7 @@ export function LeadProfile({
                     rotulo={c.rotulo}
                     valor={(lead[c.chave] as string | number | null) ?? null}
                     tipo={c.tipo}
+                    href={hrefDoCampo(c.chave, lead)}
                     onSalvar={(v) => salvar({ [c.chave]: v || null })}
                   />
                 ))}

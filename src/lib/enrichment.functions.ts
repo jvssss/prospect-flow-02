@@ -882,6 +882,12 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       google_rating: p.totalScore ?? null,
       google_reviews: p.reviewsCount ?? null,
       opening_hours: p.openingHours ?? null,
+      // O actor devolve o link do place e o placeId; até agora os dois eram
+      // descartados. Guardamos a URL direta quando existe e, na falta dela,
+      // montamos a canônica a partir do placeId, que é o id estável do Google.
+      google_meu_negocio:
+        p.url ??
+        (p.placeId ? `https://www.google.com/maps/place/?q=place_id:${p.placeId}` : null),
       cnpj: null as string | null,
     })).filter((r) => r.nome_fantasia);
 
@@ -892,7 +898,9 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
 
     let created = 0;
     if (baseRows.length) {
-      const { data: inserted, error: iErr } = await supabase
+      // google_meu_negocio foi criada fora do agente do Lovable e ainda não
+      // consta no types.ts gerado — mesmo cast estreito usado no resto do arquivo.
+      const { data: inserted, error: iErr } = await (supabase as unknown as SupabaseClient)
         .from("leads").insert(baseRows).select("id");
       if (iErr && !String(iErr.message).includes("duplicate")) throw iErr;
       created = inserted?.length ?? baseRows.length;
