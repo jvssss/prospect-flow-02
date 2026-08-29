@@ -27,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   computeGoldenNumbers, formatBRL, formatPhoneBR, formatSeconds,
-  whatsappLink, type GoalsInput,
+  mapsLink, whatsappLink, type GoalsInput,
 } from "@/lib/goldenMath";
 
 export const Route = createFileRoute("/_authenticated/cockpit")({
@@ -556,6 +556,15 @@ function Cockpit() {
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                     {lead.bairro && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{lead.bairro}{lead.cidade ? ` · ${lead.cidade}` : ""}</span>}
                     {lead.capital_social ? <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Cap. {formatBRL(Number(lead.capital_social))}</span> : null}
+                    {(() => {
+                      const maps = mapsLink(lead);
+                      return maps ? (
+                        <a href={maps} target="_blank" rel="noopener noreferrer" title="Abrir no Google Maps"
+                           className="inline-flex items-center gap-1 transition hover:text-foreground hover:underline">
+                          <MapPinned className="h-3.5 w-3.5" /> Ver no Maps
+                        </a>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
                 <div className={`grid place-items-center rounded-2xl px-5 py-3 text-right ${overtime ? "bg-destructive/10 text-destructive" : "bg-foreground text-background"}`}>

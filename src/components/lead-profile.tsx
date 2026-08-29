@@ -31,7 +31,7 @@ import {
   Snowflake,
   ExternalLink,
 } from "lucide-react";
-import { formatBRL, formatPhoneBR, whatsappLink } from "@/lib/goldenMath";
+import { formatBRL, formatPhoneBR, mapsLink, whatsappLink } from "@/lib/goldenMath";
 import { mensagemAbertura, numeroWhatsapp, venceEm } from "@/lib/cadencia";
 
 /** Etiquetas do funil, na ordem em que o lead costuma andar. */
@@ -232,15 +232,7 @@ function hrefDoCampo(chave: string, lead: LeadCompleto): string | null {
   const v = typeof bruto === "string" ? bruto.trim() : "";
   const comProtocolo = (u: string) => (u.toLowerCase().startsWith("http") ? u : `https://${u}`);
 
-  if (chave === "google_meu_negocio") {
-    if (v) return comProtocolo(v);
-    const busca = [lead.nome_fantasia ?? lead.razao_social, lead.cidade, lead.uf]
-      .filter(Boolean)
-      .join(" ");
-    return busca
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(busca)}`
-      : null;
-  }
+  if (chave === "google_meu_negocio") return mapsLink(lead);
   if (!v) return null;
   if (chave === "website" || chave === "meta_ads" || chave === "google_ads") return comProtocolo(v);
   if (chave === "instagram") {

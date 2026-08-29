@@ -370,6 +370,9 @@ function LeadFetchButton({ onDone }: { onDone: () => void }) {
           if ((j.rejected_category ?? 0) > 0) {
             toast.message(`${j.rejected_category} places descartados (não são autoescola)`);
           }
+          if ((j.rejected_closed ?? 0) > 0) {
+            toast.message(`${j.rejected_closed} descartados (permanentemente fechados)`);
+          }
           onDone();
           // Fase seguinte: backfill de sócios sobre a base inteira
           runBackfillPhase();

@@ -106,3 +106,26 @@ export function whatsappLink(phone: string | null | undefined, message?: string)
   const msg = message ? `?text=${encodeURIComponent(message)}` : "";
   return `https://wa.me/${num}${msg}`;
 }
+/**
+ * Link do Google Maps / Meu Negócio do lead.
+ *
+ * Usa a URL do place capturada no scrape quando existe. Leads criados antes de
+ * guardarmos esse campo caem numa busca por nome + cidade + UF, que resolve na
+ * prática sem precisar rodar o scrape de novo e gastar crédito do Apify.
+ */
+export function mapsLink(lead: {
+  google_meu_negocio?: string | null;
+  nome_fantasia?: string | null;
+  razao_social?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+}): string | null {
+  const url = lead.google_meu_negocio?.trim();
+  if (url) return url.toLowerCase().startsWith("http") ? url : `https://${url}`;
+  const termo = [lead.nome_fantasia ?? lead.razao_social, lead.cidade, lead.uf]
+    .filter(Boolean)
+    .join(" ");
+  return termo
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(termo)}`
+    : null;
+}

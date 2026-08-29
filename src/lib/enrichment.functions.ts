@@ -861,10 +861,16 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
       const hitTitle = /\bauto[\s-]*escola\b|\bcfc\b|centro de forma[cç][ãa]o/i.test(title);
       return hitCat || hitTitle;
     };
-    const categoryFiltered = nicheIsAutoescola
-      ? filteredItems.filter(isAutoescola)
-      : filteredItems;
-    const rejectedByCategory = filteredItems.length - categoryFiltered.length;
+    // Negócio fechado não atende telefone. O actor marca isso e o campo vinha
+    // sendo ignorado — foi assim que um lead chamado "PERMANENTEMENTE FECHADO"
+    // entrou na base e virou fila de ligação.
+    const abertos = filteredItems.filter(
+      (p: any) => !p.permanentlyClosed && !p.temporarilyClosed,
+    );
+    const rejectedByClosed = filteredItems.length - abertos.length;
+
+    const categoryFiltered = nicheIsAutoescola ? abertos.filter(isAutoescola) : abertos;
+    const rejectedByCategory = abertos.length - categoryFiltered.length;
     const baseRows = categoryFiltered.map((p: any) => ({
       user_id: userId,
       source: "apify_gmaps",
@@ -909,7 +915,13 @@ export const syncEnrichmentJob = createServerFn({ method: "POST" })
     await supabase.from("enrichment_jobs")
       .update({ status: "done", progress: 100, leads_created: created }).eq("id", job.id);
 
-    return { ...job, status: "done", leads_created: created, rejected_category: rejectedByCategory };
+    return {
+      ...job,
+      status: "done",
+      leads_created: created,
+      rejected_category: rejectedByCategory,
+      rejected_closed: rejectedByClosed,
+    };
   });
 
 // Enriquecer em lote leads com CNPJ e sem QSA salvo
