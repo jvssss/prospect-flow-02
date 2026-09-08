@@ -204,6 +204,38 @@ const CNPJA_OPEN_BASE = "https://open.cnpja.com";
  * Aqui as falhas são acumuladas e gravadas em `public.diagnosticos` ao fim do
  * lote, para o motivo real aparecer em vez de virar mais um `not_found`.
  */
+/**
+ * Buscas rejeitadas pela própria CNPJá, confirmadas em produção:
+ *
+ *   phones.in        → 400 "property phones.in should not exist"
+ *   address.postal.in → 400 (mesma validação)
+ *
+ * Elas nunca funcionaram. Pior: cada tentativa consumia uma das 30 requisições
+ * do limite e voltava erro, esgotando a cota antes da busca por nome — que é a
+ * única comprovadamente aceita (levou 429, não 400). Ficam desligadas até
+ * alguém confirmar os nomes corretos na documentação da CNPJá.
+ */
+const BUSCAS_REJEITADAS_PELA_API = true;
+
+/**
+ * A CNPJá responde 429 com {"limit":30,"ttl":8}. Ao bater no limite, pausamos
+ * as chamadas seguintes em vez de gastar o resto do lote levando 429.
+ */
+let pausaCnpjaAte = 0;
+function emPausaCnpja(): boolean {
+  return Date.now() < pausaCnpjaAte;
+}
+function registrarRateLimit(corpo: string) {
+  let ttl = 10;
+  try {
+    const j = JSON.parse(corpo);
+    if (typeof j?.ttl === "number" && j.ttl > 0) ttl = Math.min(j.ttl, 60);
+  } catch {
+    /* corpo não-JSON: usa o padrão */
+  }
+  pausaCnpjaAte = Date.now() + (ttl + 1) * 1000;
+}
+
 const falhasCnpja: string[] = [];
 function registrarFalhaCnpja(onde: string, detalhe: string) {
   if (falhasCnpja.length >= 8) return;
@@ -273,6 +305,7 @@ async function cnpjaSearchByName(
   if (nUf) params.set("address.state.in", nUf);
   params.set("limit", "20");
   try {
+    if (emPausaCnpja()) return [];
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -283,6 +316,7 @@ async function cnpjaSearchByName(
       // parâmetro desconhecido ou plano que não inclui busca. Os params no
       // registro dizem qual das quatro buscas falhou.
       const corpo = await res.text().catch(() => "");
+      if (res.status === 429) registrarRateLimit(corpo);
       registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
       return [];
     }
@@ -366,11 +400,13 @@ async function cnpjaSearchByPhone(
   const digits = normalizeBrPhone(phone);
   if (!digits) return [];
   const params = new URLSearchParams();
+  if (BUSCAS_REJEITADAS_PELA_API) return [];
   params.set("phones.in", digits);
   const nUf = normalizeUf(uf ?? null);
   if (nUf) params.set("address.state.in", nUf);
   params.set("limit", "5");
   try {
+    if (emPausaCnpja()) return [];
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -381,6 +417,7 @@ async function cnpjaSearchByPhone(
       // parâmetro desconhecido ou plano que não inclui busca. Os params no
       // registro dizem qual das quatro buscas falhou.
       const corpo = await res.text().catch(() => "");
+      if (res.status === 429) registrarRateLimit(corpo);
       registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
       return [];
     }
@@ -408,9 +445,11 @@ async function cnpjaSearchByPostal(
   const d = cep.replace(/\D/g, "");
   if (d.length !== 8) return [];
   const params = new URLSearchParams();
+  if (BUSCAS_REJEITADAS_PELA_API) return [];
   params.set("address.postal.in", d);
   params.set("limit", "20");
   try {
+    if (emPausaCnpja()) return [];
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -421,6 +460,7 @@ async function cnpjaSearchByPostal(
       // parâmetro desconhecido ou plano que não inclui busca. Os params no
       // registro dizem qual das quatro buscas falhou.
       const corpo = await res.text().catch(() => "");
+      if (res.status === 429) registrarRateLimit(corpo);
       registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
       return [];
     }
@@ -451,6 +491,7 @@ async function cnpjaSearchByDistrict(
   if (nUf) params.set("address.state.in", nUf);
   params.set("limit", "10");
   try {
+    if (emPausaCnpja()) return [];
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -461,6 +502,7 @@ async function cnpjaSearchByDistrict(
       // parâmetro desconhecido ou plano que não inclui busca. Os params no
       // registro dizem qual das quatro buscas falhou.
       const corpo = await res.text().catch(() => "");
+      if (res.status === 429) registrarRateLimit(corpo);
       registrarFalhaCnpja("busca", `HTTP ${res.status} · ${params.toString()} · ${corpo.slice(0, 250)}`);
       return [];
     }
