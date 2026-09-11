@@ -222,6 +222,20 @@ const BUSCAS_REJEITADAS_PELA_API = true;
  * as chamadas seguintes em vez de gastar o resto do lote levando 429.
  */
 let pausaCnpjaAte = 0;
+/** Quantos 429 já vimos. processOne compara antes/depois para saber se o lead foi afetado. */
+let rateLimitHits = 0;
+
+/**
+ * Espera a janela do rate limit fechar. Devolver [] aqui (versão anterior) fazia
+ * a cascata concluir "não achei" e marcar o lead not_found — e not_found nunca
+ * mais entra num lote. Com crédito sobrando, os leads eram descartados só por
+ * terem caído na janela do 429.
+ */
+async function aguardarPausaCnpja() {
+  const falta = pausaCnpjaAte - Date.now();
+  if (falta > 0) await sleep(falta);
+}
+
 function emPausaCnpja(): boolean {
   return Date.now() < pausaCnpjaAte;
 }
@@ -233,6 +247,7 @@ function registrarRateLimit(corpo: string) {
   } catch {
     /* corpo não-JSON: usa o padrão */
   }
+  rateLimitHits++;
   pausaCnpjaAte = Date.now() + (ttl + 1) * 1000;
 }
 
@@ -305,7 +320,7 @@ async function cnpjaSearchByName(
   if (nUf) params.set("address.state.in", nUf);
   params.set("limit", "20");
   try {
-    if (emPausaCnpja()) return [];
+    await aguardarPausaCnpja();
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -324,9 +339,20 @@ async function cnpjaSearchByName(
     const records: any[] = Array.isArray(json?.records) ? json.records
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json) ? json : [];
+    // Sem isto, "a API nao achou nada" e "achou, mas em outra cidade" viram o
+    // mesmo not_found — e sao problemas diferentes.
+    if (!records.length) registrarFalhaCnpja("buscaVazia", `names.in=${nome}`);
     if (!cidade) return records;
-    // Estrito: se nada bate na cidade alvo, descarta (evita casar homônimo em outra cidade).
-    return records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
+    // Estrito: se nada bate na cidade alvo, descarta (evita homonimo de outra cidade).
+    const naCidade = records.filter((r) => acceptCityMatch(cidade, r?.address?.city));
+    if (records.length && !naCidade.length) {
+      const outras = records.slice(0, 3).map((r) => r?.address?.city).join(", ");
+      registrarFalhaCnpja(
+        "filtroCidade",
+        `${records.length} resultado(s) para "${nome}" fora de ${cidade}: ${outras}`,
+      );
+    }
+    return naCidade;
   } catch (e) {
     registrarFalhaCnpja("busca", `exceção: ${String(e).slice(0, 200)}`);
     return [];
@@ -406,7 +432,7 @@ async function cnpjaSearchByPhone(
   if (nUf) params.set("address.state.in", nUf);
   params.set("limit", "5");
   try {
-    if (emPausaCnpja()) return [];
+    await aguardarPausaCnpja();
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -449,7 +475,7 @@ async function cnpjaSearchByPostal(
   params.set("address.postal.in", d);
   params.set("limit", "20");
   try {
-    if (emPausaCnpja()) return [];
+    await aguardarPausaCnpja();
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -491,7 +517,7 @@ async function cnpjaSearchByDistrict(
   if (nUf) params.set("address.state.in", nUf);
   params.set("limit", "10");
   try {
-    if (emPausaCnpja()) return [];
+    await aguardarPausaCnpja();
     const res = await fetchWithTimeout(
       `${CNPJA_BASE}/office?${params.toString()}`,
       { headers: cnpjaHeaders() },
@@ -674,7 +700,8 @@ async function cnpjaFindByNameVariants(
   cidade?: string | null,
   uf?: string | null,
 ): Promise<any | null> {
-  const cands = nameCandidates(nome, cidade);
+  // As mais especificas vem primeiro; passar de 4 so gasta cota do rate limit.
+  const cands = nameCandidates(nome, cidade).slice(0, 4);
   for (const cand of cands) {
     const results = await cnpjaSearchByName(cand, cidade, uf);
     if (results.length > 0) return results[0];
@@ -1059,13 +1086,18 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
 
     // Processa em paralelo com concorrência limitada. CNPJá paga aguenta
     // vários RPS; ~5 em voo é seguro e multiplica ~5x a vazão por clique.
-    const CONCURRENCY = 5;
+    // 5 leads em paralelo x ~5 variantes de nome = ~25 requisições no primeiro
+    // segundo, contra um limite de 30. Dois em voo cabem na janela.
+    const CONCURRENCY = 2;
     const queue = (noCnpj ?? []).filter((l) => l.nome_fantasia);
     const processOne = async (l: any) => {
       if (timeUp()) return;
       scanned++;
       let found: Awaited<ReturnType<typeof cascadeFindCompany>> = null;
+      const hitsAntes = rateLimitHits;
       try { found = await cascadeFindCompany(l); } catch { /* ignore */ }
+      // Se o rate limit tocou esta busca, "nao achei" nao e conclusivo.
+      const statusSemResultado = rateLimitHits > hitsAntes ? "retry" : "not_found";
       const detail = found?.detail ?? null;
       const cnpj = found?.cnpj ?? null;
       const strategy = found?.strategy ?? null;
@@ -1085,8 +1117,8 @@ export const enrichMissingSocios = createServerFn({ method: "POST" })
       } else if (cnpj) {
         await supabase.from("leads").update({ cnpj }).eq("id", l.id);
       } else {
-        await supabase.from("leads").update({ enrichment_status: "not_found" }).eq("id", l.id);
-        not_found++;
+        await supabase.from("leads").update({ enrichment_status: statusSemResultado }).eq("id", l.id);
+        if (statusSemResultado === "not_found") not_found++;
       }
     };
 
