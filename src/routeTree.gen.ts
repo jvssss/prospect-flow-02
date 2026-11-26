@@ -9,62 +9,61 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedSdrRouteImport } from './routes/_authenticated/sdr'
-import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
-import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
-import { Route as AuthenticatedDisparoRouteImport } from './routes/_authenticated/disparo'
-import { Route as AuthenticatedDiarioRouteImport } from './routes/_authenticated/diario'
-import { Route as AuthenticatedDemandasRouteImport } from './routes/_authenticated/demandas'
-import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedCockpitRouteImport } from './routes/_authenticated/cockpit'
-import { Route as AuthenticatedQualifyLeadIdRouteImport } from './routes/_authenticated/qualify.$leadId'
+import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
+import { Route as AuthenticatedDemandasRouteImport } from './routes/_authenticated/demandas'
+import { Route as AuthenticatedDiarioRouteImport } from './routes/_authenticated/diario'
+import { Route as AuthenticatedDisparoRouteImport } from './routes/_authenticated/disparo'
+import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
+import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
+import { Route as AuthenticatedSdrRouteImport } from './routes/_authenticated/sdr'
+import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as AuthenticatedCloserLeadIdRouteImport } from './routes/_authenticated/closer.$leadId'
+import { Route as AuthenticatedQualifyLeadIdRouteImport } from './routes/_authenticated/qualify.$leadId'
+import { Route as ApiCronEnrichRouteImport } from './routes/api.cron.enrich'
+import { Route as ApiV1DocsRouteImport } from './routes/api.v1.docs'
+import { Route as ApiV1GoalsRouteImport } from './routes/api.v1.goals'
+import { Route as ApiV1MeRouteImport } from './routes/api.v1.me'
+import { Route as ApiV1OpenapiRouteImport } from './routes/api.v1.openapi'
+import { Route as ApiV1ApiKeysIndexRouteImport } from './routes/api.v1.api-keys.index'
+import { Route as ApiV1ApiKeysIdRouteImport } from './routes/api.v1.api-keys.$id'
+import { Route as ApiV1EnrichmentQsaRouteImport } from './routes/api.v1.enrichment.qsa'
+import { Route as ApiV1EnrichmentStatsRouteImport } from './routes/api.v1.enrichment.stats'
+import { Route as ApiV1LeadsIndexRouteImport } from './routes/api.v1.leads.index'
+import { Route as ApiV1LeadsIdRouteImport } from './routes/api.v1.leads.$id'
+import { Route as ApiV1MetricsIndexRouteImport } from './routes/api.v1.metrics.index'
+import { Route as ApiV1MetricsTodayRouteImport } from './routes/api.v1.metrics.today'
+import { Route as ApiV1QsaCnpjRouteImport } from './routes/api.v1.qsa.$cnpj'
+import { Route as ApiV1QsaResolverRouteImport } from './routes/api.v1.qsa.resolver'
+import { Route as ApiV1QueueIndexRouteImport } from './routes/api.v1.queue.index'
+import { Route as ApiV1QueueCitiesRouteImport } from './routes/api.v1.queue.cities'
+import { Route as ApiV1EnrichmentJobsIndexRouteImport } from './routes/api.v1.enrichment.jobs.index'
+import { Route as ApiV1EnrichmentJobsIdRouteImport } from './routes/api.v1.enrichment.jobs.$id'
+import { Route as ApiV1LeadsIdCallsRouteImport } from './routes/api.v1.leads.$id.calls'
+import { Route as ApiV1LeadsIdQsaRouteImport } from './routes/api.v1.leads.$id.qsa'
+import { Route as ApiV1MetricsSuggestionIndexRouteImport } from './routes/api.v1.metrics.suggestion.index'
+import { Route as ApiV1MetricsSuggestionApplyRouteImport } from './routes/api.v1.metrics.suggestion.apply'
 
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedSdrRoute = AuthenticatedSdrRouteImport.update({
-  id: '/sdr',
-  path: '/sdr',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
-  id: '/leads',
-  path: '/leads',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedGoalsRoute = AuthenticatedGoalsRouteImport.update({
-  id: '/goals',
-  path: '/goals',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDisparoRoute = AuthenticatedDisparoRouteImport.update({
-  id: '/disparo',
-  path: '/disparo',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDiarioRoute = AuthenticatedDiarioRouteImport.update({
-  id: '/diario',
-  path: '/diario',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDemandasRoute = AuthenticatedDemandasRouteImport.update({
-  id: '/demandas',
-  path: '/demandas',
+const AuthenticatedCockpitRoute = AuthenticatedCockpitRouteImport.update({
+  id: '/cockpit',
+  path: '/cockpit',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCrmRoute = AuthenticatedCrmRouteImport.update({
@@ -72,22 +71,170 @@ const AuthenticatedCrmRoute = AuthenticatedCrmRouteImport.update({
   path: '/crm',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedCockpitRoute = AuthenticatedCockpitRouteImport.update({
-  id: '/cockpit',
-  path: '/cockpit',
+const AuthenticatedDemandasRoute = AuthenticatedDemandasRouteImport.update({
+  id: '/demandas',
+  path: '/demandas',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDiarioRoute = AuthenticatedDiarioRouteImport.update({
+  id: '/diario',
+  path: '/diario',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDisparoRoute = AuthenticatedDisparoRouteImport.update({
+  id: '/disparo',
+  path: '/disparo',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedGoalsRoute = AuthenticatedGoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSdrRoute = AuthenticatedSdrRouteImport.update({
+  id: '/sdr',
+  path: '/sdr',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedCloserLeadIdRoute =
+  AuthenticatedCloserLeadIdRouteImport.update({
+    id: '/closer/$leadId',
+    path: '/closer/$leadId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedQualifyLeadIdRoute =
   AuthenticatedQualifyLeadIdRouteImport.update({
     id: '/qualify/$leadId',
     path: '/qualify/$leadId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedCloserLeadIdRoute =
-  AuthenticatedCloserLeadIdRouteImport.update({
-    id: '/closer/$leadId',
-    path: '/closer/$leadId',
-    getParentRoute: () => AuthenticatedRouteRoute,
+const ApiCronEnrichRoute = ApiCronEnrichRouteImport.update({
+  id: '/api/cron/enrich',
+  path: '/api/cron/enrich',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1DocsRoute = ApiV1DocsRouteImport.update({
+  id: '/api/v1/docs',
+  path: '/api/v1/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1GoalsRoute = ApiV1GoalsRouteImport.update({
+  id: '/api/v1/goals',
+  path: '/api/v1/goals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1MeRoute = ApiV1MeRouteImport.update({
+  id: '/api/v1/me',
+  path: '/api/v1/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1OpenapiRoute = ApiV1OpenapiRouteImport.update({
+  id: '/api/v1/openapi',
+  path: '/api/v1/openapi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ApiKeysIndexRoute = ApiV1ApiKeysIndexRouteImport.update({
+  id: '/api/v1/api-keys/',
+  path: '/api/v1/api-keys/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ApiKeysIdRoute = ApiV1ApiKeysIdRouteImport.update({
+  id: '/api/v1/api-keys/$id',
+  path: '/api/v1/api-keys/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1EnrichmentQsaRoute = ApiV1EnrichmentQsaRouteImport.update({
+  id: '/api/v1/enrichment/qsa',
+  path: '/api/v1/enrichment/qsa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1EnrichmentStatsRoute = ApiV1EnrichmentStatsRouteImport.update({
+  id: '/api/v1/enrichment/stats',
+  path: '/api/v1/enrichment/stats',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1LeadsIndexRoute = ApiV1LeadsIndexRouteImport.update({
+  id: '/api/v1/leads/',
+  path: '/api/v1/leads/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1LeadsIdRoute = ApiV1LeadsIdRouteImport.update({
+  id: '/api/v1/leads/$id',
+  path: '/api/v1/leads/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1MetricsIndexRoute = ApiV1MetricsIndexRouteImport.update({
+  id: '/api/v1/metrics/',
+  path: '/api/v1/metrics/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1MetricsTodayRoute = ApiV1MetricsTodayRouteImport.update({
+  id: '/api/v1/metrics/today',
+  path: '/api/v1/metrics/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1QsaCnpjRoute = ApiV1QsaCnpjRouteImport.update({
+  id: '/api/v1/qsa/$cnpj',
+  path: '/api/v1/qsa/$cnpj',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1QsaResolverRoute = ApiV1QsaResolverRouteImport.update({
+  id: '/api/v1/qsa/resolver',
+  path: '/api/v1/qsa/resolver',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1QueueIndexRoute = ApiV1QueueIndexRouteImport.update({
+  id: '/api/v1/queue/',
+  path: '/api/v1/queue/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1QueueCitiesRoute = ApiV1QueueCitiesRouteImport.update({
+  id: '/api/v1/queue/cities',
+  path: '/api/v1/queue/cities',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1EnrichmentJobsIndexRoute =
+  ApiV1EnrichmentJobsIndexRouteImport.update({
+    id: '/api/v1/enrichment/jobs/',
+    path: '/api/v1/enrichment/jobs/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1EnrichmentJobsIdRoute = ApiV1EnrichmentJobsIdRouteImport.update({
+  id: '/api/v1/enrichment/jobs/$id',
+  path: '/api/v1/enrichment/jobs/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1LeadsIdCallsRoute = ApiV1LeadsIdCallsRouteImport.update({
+  id: '/calls',
+  path: '/calls',
+  getParentRoute: () => ApiV1LeadsIdRoute,
+} as any)
+const ApiV1LeadsIdQsaRoute = ApiV1LeadsIdQsaRouteImport.update({
+  id: '/qsa',
+  path: '/qsa',
+  getParentRoute: () => ApiV1LeadsIdRoute,
+} as any)
+const ApiV1MetricsSuggestionIndexRoute =
+  ApiV1MetricsSuggestionIndexRouteImport.update({
+    id: '/api/v1/metrics/suggestion/',
+    path: '/api/v1/metrics/suggestion/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1MetricsSuggestionApplyRoute =
+  ApiV1MetricsSuggestionApplyRouteImport.update({
+    id: '/api/v1/metrics/suggestion/apply',
+    path: '/api/v1/metrics/suggestion/apply',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -101,8 +248,32 @@ export interface FileRoutesByFullPath {
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/sdr': typeof AuthenticatedSdrRoute
+  '/api/health': typeof ApiHealthRoute
   '/closer/$leadId': typeof AuthenticatedCloserLeadIdRoute
   '/qualify/$leadId': typeof AuthenticatedQualifyLeadIdRoute
+  '/api/cron/enrich': typeof ApiCronEnrichRoute
+  '/api/v1/docs': typeof ApiV1DocsRoute
+  '/api/v1/goals': typeof ApiV1GoalsRoute
+  '/api/v1/me': typeof ApiV1MeRoute
+  '/api/v1/openapi': typeof ApiV1OpenapiRoute
+  '/api/v1/api-keys/$id': typeof ApiV1ApiKeysIdRoute
+  '/api/v1/enrichment/qsa': typeof ApiV1EnrichmentQsaRoute
+  '/api/v1/enrichment/stats': typeof ApiV1EnrichmentStatsRoute
+  '/api/v1/leads/$id': typeof ApiV1LeadsIdRouteWithChildren
+  '/api/v1/metrics/today': typeof ApiV1MetricsTodayRoute
+  '/api/v1/qsa/$cnpj': typeof ApiV1QsaCnpjRoute
+  '/api/v1/qsa/resolver': typeof ApiV1QsaResolverRoute
+  '/api/v1/queue/cities': typeof ApiV1QueueCitiesRoute
+  '/api/v1/api-keys/': typeof ApiV1ApiKeysIndexRoute
+  '/api/v1/leads/': typeof ApiV1LeadsIndexRoute
+  '/api/v1/metrics/': typeof ApiV1MetricsIndexRoute
+  '/api/v1/queue/': typeof ApiV1QueueIndexRoute
+  '/api/v1/enrichment/jobs/$id': typeof ApiV1EnrichmentJobsIdRoute
+  '/api/v1/leads/$id/calls': typeof ApiV1LeadsIdCallsRoute
+  '/api/v1/leads/$id/qsa': typeof ApiV1LeadsIdQsaRoute
+  '/api/v1/metrics/suggestion/apply': typeof ApiV1MetricsSuggestionApplyRoute
+  '/api/v1/enrichment/jobs/': typeof ApiV1EnrichmentJobsIndexRoute
+  '/api/v1/metrics/suggestion/': typeof ApiV1MetricsSuggestionIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -115,8 +286,32 @@ export interface FileRoutesByTo {
   '/goals': typeof AuthenticatedGoalsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/sdr': typeof AuthenticatedSdrRoute
+  '/api/health': typeof ApiHealthRoute
   '/closer/$leadId': typeof AuthenticatedCloserLeadIdRoute
   '/qualify/$leadId': typeof AuthenticatedQualifyLeadIdRoute
+  '/api/cron/enrich': typeof ApiCronEnrichRoute
+  '/api/v1/docs': typeof ApiV1DocsRoute
+  '/api/v1/goals': typeof ApiV1GoalsRoute
+  '/api/v1/me': typeof ApiV1MeRoute
+  '/api/v1/openapi': typeof ApiV1OpenapiRoute
+  '/api/v1/api-keys/$id': typeof ApiV1ApiKeysIdRoute
+  '/api/v1/enrichment/qsa': typeof ApiV1EnrichmentQsaRoute
+  '/api/v1/enrichment/stats': typeof ApiV1EnrichmentStatsRoute
+  '/api/v1/leads/$id': typeof ApiV1LeadsIdRouteWithChildren
+  '/api/v1/metrics/today': typeof ApiV1MetricsTodayRoute
+  '/api/v1/qsa/$cnpj': typeof ApiV1QsaCnpjRoute
+  '/api/v1/qsa/resolver': typeof ApiV1QsaResolverRoute
+  '/api/v1/queue/cities': typeof ApiV1QueueCitiesRoute
+  '/api/v1/api-keys': typeof ApiV1ApiKeysIndexRoute
+  '/api/v1/leads': typeof ApiV1LeadsIndexRoute
+  '/api/v1/metrics': typeof ApiV1MetricsIndexRoute
+  '/api/v1/queue': typeof ApiV1QueueIndexRoute
+  '/api/v1/enrichment/jobs/$id': typeof ApiV1EnrichmentJobsIdRoute
+  '/api/v1/leads/$id/calls': typeof ApiV1LeadsIdCallsRoute
+  '/api/v1/leads/$id/qsa': typeof ApiV1LeadsIdQsaRoute
+  '/api/v1/metrics/suggestion/apply': typeof ApiV1MetricsSuggestionApplyRoute
+  '/api/v1/enrichment/jobs': typeof ApiV1EnrichmentJobsIndexRoute
+  '/api/v1/metrics/suggestion': typeof ApiV1MetricsSuggestionIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -131,8 +326,32 @@ export interface FileRoutesById {
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/sdr': typeof AuthenticatedSdrRoute
+  '/api/health': typeof ApiHealthRoute
   '/_authenticated/closer/$leadId': typeof AuthenticatedCloserLeadIdRoute
   '/_authenticated/qualify/$leadId': typeof AuthenticatedQualifyLeadIdRoute
+  '/api/cron/enrich': typeof ApiCronEnrichRoute
+  '/api/v1/docs': typeof ApiV1DocsRoute
+  '/api/v1/goals': typeof ApiV1GoalsRoute
+  '/api/v1/me': typeof ApiV1MeRoute
+  '/api/v1/openapi': typeof ApiV1OpenapiRoute
+  '/api/v1/api-keys/$id': typeof ApiV1ApiKeysIdRoute
+  '/api/v1/enrichment/qsa': typeof ApiV1EnrichmentQsaRoute
+  '/api/v1/enrichment/stats': typeof ApiV1EnrichmentStatsRoute
+  '/api/v1/leads/$id': typeof ApiV1LeadsIdRouteWithChildren
+  '/api/v1/metrics/today': typeof ApiV1MetricsTodayRoute
+  '/api/v1/qsa/$cnpj': typeof ApiV1QsaCnpjRoute
+  '/api/v1/qsa/resolver': typeof ApiV1QsaResolverRoute
+  '/api/v1/queue/cities': typeof ApiV1QueueCitiesRoute
+  '/api/v1/api-keys/': typeof ApiV1ApiKeysIndexRoute
+  '/api/v1/leads/': typeof ApiV1LeadsIndexRoute
+  '/api/v1/metrics/': typeof ApiV1MetricsIndexRoute
+  '/api/v1/queue/': typeof ApiV1QueueIndexRoute
+  '/api/v1/enrichment/jobs/$id': typeof ApiV1EnrichmentJobsIdRoute
+  '/api/v1/leads/$id/calls': typeof ApiV1LeadsIdCallsRoute
+  '/api/v1/leads/$id/qsa': typeof ApiV1LeadsIdQsaRoute
+  '/api/v1/metrics/suggestion/apply': typeof ApiV1MetricsSuggestionApplyRoute
+  '/api/v1/enrichment/jobs/': typeof ApiV1EnrichmentJobsIndexRoute
+  '/api/v1/metrics/suggestion/': typeof ApiV1MetricsSuggestionIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -147,8 +366,32 @@ export interface FileRouteTypes {
     | '/goals'
     | '/leads'
     | '/sdr'
+    | '/api/health'
     | '/closer/$leadId'
     | '/qualify/$leadId'
+    | '/api/cron/enrich'
+    | '/api/v1/docs'
+    | '/api/v1/goals'
+    | '/api/v1/me'
+    | '/api/v1/openapi'
+    | '/api/v1/api-keys/$id'
+    | '/api/v1/enrichment/qsa'
+    | '/api/v1/enrichment/stats'
+    | '/api/v1/leads/$id'
+    | '/api/v1/metrics/today'
+    | '/api/v1/qsa/$cnpj'
+    | '/api/v1/qsa/resolver'
+    | '/api/v1/queue/cities'
+    | '/api/v1/api-keys/'
+    | '/api/v1/leads/'
+    | '/api/v1/metrics/'
+    | '/api/v1/queue/'
+    | '/api/v1/enrichment/jobs/$id'
+    | '/api/v1/leads/$id/calls'
+    | '/api/v1/leads/$id/qsa'
+    | '/api/v1/metrics/suggestion/apply'
+    | '/api/v1/enrichment/jobs/'
+    | '/api/v1/metrics/suggestion/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -161,8 +404,32 @@ export interface FileRouteTypes {
     | '/goals'
     | '/leads'
     | '/sdr'
+    | '/api/health'
     | '/closer/$leadId'
     | '/qualify/$leadId'
+    | '/api/cron/enrich'
+    | '/api/v1/docs'
+    | '/api/v1/goals'
+    | '/api/v1/me'
+    | '/api/v1/openapi'
+    | '/api/v1/api-keys/$id'
+    | '/api/v1/enrichment/qsa'
+    | '/api/v1/enrichment/stats'
+    | '/api/v1/leads/$id'
+    | '/api/v1/metrics/today'
+    | '/api/v1/qsa/$cnpj'
+    | '/api/v1/qsa/resolver'
+    | '/api/v1/queue/cities'
+    | '/api/v1/api-keys'
+    | '/api/v1/leads'
+    | '/api/v1/metrics'
+    | '/api/v1/queue'
+    | '/api/v1/enrichment/jobs/$id'
+    | '/api/v1/leads/$id/calls'
+    | '/api/v1/leads/$id/qsa'
+    | '/api/v1/metrics/suggestion/apply'
+    | '/api/v1/enrichment/jobs'
+    | '/api/v1/metrics/suggestion'
   id:
     | '__root__'
     | '/'
@@ -176,23 +443,69 @@ export interface FileRouteTypes {
     | '/_authenticated/goals'
     | '/_authenticated/leads'
     | '/_authenticated/sdr'
+    | '/api/health'
     | '/_authenticated/closer/$leadId'
     | '/_authenticated/qualify/$leadId'
+    | '/api/cron/enrich'
+    | '/api/v1/docs'
+    | '/api/v1/goals'
+    | '/api/v1/me'
+    | '/api/v1/openapi'
+    | '/api/v1/api-keys/$id'
+    | '/api/v1/enrichment/qsa'
+    | '/api/v1/enrichment/stats'
+    | '/api/v1/leads/$id'
+    | '/api/v1/metrics/today'
+    | '/api/v1/qsa/$cnpj'
+    | '/api/v1/qsa/resolver'
+    | '/api/v1/queue/cities'
+    | '/api/v1/api-keys/'
+    | '/api/v1/leads/'
+    | '/api/v1/metrics/'
+    | '/api/v1/queue/'
+    | '/api/v1/enrichment/jobs/$id'
+    | '/api/v1/leads/$id/calls'
+    | '/api/v1/leads/$id/qsa'
+    | '/api/v1/metrics/suggestion/apply'
+    | '/api/v1/enrichment/jobs/'
+    | '/api/v1/metrics/suggestion/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiHealthRoute: typeof ApiHealthRoute
+  ApiCronEnrichRoute: typeof ApiCronEnrichRoute
+  ApiV1DocsRoute: typeof ApiV1DocsRoute
+  ApiV1GoalsRoute: typeof ApiV1GoalsRoute
+  ApiV1MeRoute: typeof ApiV1MeRoute
+  ApiV1OpenapiRoute: typeof ApiV1OpenapiRoute
+  ApiV1ApiKeysIdRoute: typeof ApiV1ApiKeysIdRoute
+  ApiV1EnrichmentQsaRoute: typeof ApiV1EnrichmentQsaRoute
+  ApiV1EnrichmentStatsRoute: typeof ApiV1EnrichmentStatsRoute
+  ApiV1LeadsIdRoute: typeof ApiV1LeadsIdRouteWithChildren
+  ApiV1MetricsTodayRoute: typeof ApiV1MetricsTodayRoute
+  ApiV1QsaCnpjRoute: typeof ApiV1QsaCnpjRoute
+  ApiV1QsaResolverRoute: typeof ApiV1QsaResolverRoute
+  ApiV1QueueCitiesRoute: typeof ApiV1QueueCitiesRoute
+  ApiV1ApiKeysIndexRoute: typeof ApiV1ApiKeysIndexRoute
+  ApiV1LeadsIndexRoute: typeof ApiV1LeadsIndexRoute
+  ApiV1MetricsIndexRoute: typeof ApiV1MetricsIndexRoute
+  ApiV1QueueIndexRoute: typeof ApiV1QueueIndexRoute
+  ApiV1EnrichmentJobsIdRoute: typeof ApiV1EnrichmentJobsIdRoute
+  ApiV1MetricsSuggestionApplyRoute: typeof ApiV1MetricsSuggestionApplyRoute
+  ApiV1EnrichmentJobsIndexRoute: typeof ApiV1EnrichmentJobsIndexRoute
+  ApiV1MetricsSuggestionIndexRoute: typeof ApiV1MetricsSuggestionIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -202,53 +515,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/sdr': {
-      id: '/_authenticated/sdr'
-      path: '/sdr'
-      fullPath: '/sdr'
-      preLoaderRoute: typeof AuthenticatedSdrRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/leads': {
-      id: '/_authenticated/leads'
-      path: '/leads'
-      fullPath: '/leads'
-      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/goals': {
-      id: '/_authenticated/goals'
-      path: '/goals'
-      fullPath: '/goals'
-      preLoaderRoute: typeof AuthenticatedGoalsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/disparo': {
-      id: '/_authenticated/disparo'
-      path: '/disparo'
-      fullPath: '/disparo'
-      preLoaderRoute: typeof AuthenticatedDisparoRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/diario': {
-      id: '/_authenticated/diario'
-      path: '/diario'
-      fullPath: '/diario'
-      preLoaderRoute: typeof AuthenticatedDiarioRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/demandas': {
-      id: '/_authenticated/demandas'
-      path: '/demandas'
-      fullPath: '/demandas'
-      preLoaderRoute: typeof AuthenticatedDemandasRouteImport
+    '/_authenticated/cockpit': {
+      id: '/_authenticated/cockpit'
+      path: '/cockpit'
+      fullPath: '/cockpit'
+      preLoaderRoute: typeof AuthenticatedCockpitRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/crm': {
@@ -258,11 +536,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCrmRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/cockpit': {
-      id: '/_authenticated/cockpit'
-      path: '/cockpit'
-      fullPath: '/cockpit'
-      preLoaderRoute: typeof AuthenticatedCockpitRouteImport
+    '/_authenticated/demandas': {
+      id: '/_authenticated/demandas'
+      path: '/demandas'
+      fullPath: '/demandas'
+      preLoaderRoute: typeof AuthenticatedDemandasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/diario': {
+      id: '/_authenticated/diario'
+      path: '/diario'
+      fullPath: '/diario'
+      preLoaderRoute: typeof AuthenticatedDiarioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/disparo': {
+      id: '/_authenticated/disparo'
+      path: '/disparo'
+      fullPath: '/disparo'
+      preLoaderRoute: typeof AuthenticatedDisparoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/goals': {
+      id: '/_authenticated/goals'
+      path: '/goals'
+      fullPath: '/goals'
+      preLoaderRoute: typeof AuthenticatedGoalsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/leads': {
+      id: '/_authenticated/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sdr': {
+      id: '/_authenticated/sdr'
+      path: '/sdr'
+      fullPath: '/sdr'
+      preLoaderRoute: typeof AuthenticatedSdrRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/closer/$leadId': {
+      id: '/_authenticated/closer/$leadId'
+      path: '/closer/$leadId'
+      fullPath: '/closer/$leadId'
+      preLoaderRoute: typeof AuthenticatedCloserLeadIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/qualify/$leadId': {
@@ -272,12 +599,166 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedQualifyLeadIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/closer/$leadId': {
-      id: '/_authenticated/closer/$leadId'
-      path: '/closer/$leadId'
-      fullPath: '/closer/$leadId'
-      preLoaderRoute: typeof AuthenticatedCloserLeadIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/api/cron/enrich': {
+      id: '/api/cron/enrich'
+      path: '/api/cron/enrich'
+      fullPath: '/api/cron/enrich'
+      preLoaderRoute: typeof ApiCronEnrichRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/docs': {
+      id: '/api/v1/docs'
+      path: '/api/v1/docs'
+      fullPath: '/api/v1/docs'
+      preLoaderRoute: typeof ApiV1DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/goals': {
+      id: '/api/v1/goals'
+      path: '/api/v1/goals'
+      fullPath: '/api/v1/goals'
+      preLoaderRoute: typeof ApiV1GoalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/me': {
+      id: '/api/v1/me'
+      path: '/api/v1/me'
+      fullPath: '/api/v1/me'
+      preLoaderRoute: typeof ApiV1MeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/openapi': {
+      id: '/api/v1/openapi'
+      path: '/api/v1/openapi'
+      fullPath: '/api/v1/openapi'
+      preLoaderRoute: typeof ApiV1OpenapiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/api-keys/': {
+      id: '/api/v1/api-keys/'
+      path: '/api/v1/api-keys'
+      fullPath: '/api/v1/api-keys/'
+      preLoaderRoute: typeof ApiV1ApiKeysIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/api-keys/$id': {
+      id: '/api/v1/api-keys/$id'
+      path: '/api/v1/api-keys/$id'
+      fullPath: '/api/v1/api-keys/$id'
+      preLoaderRoute: typeof ApiV1ApiKeysIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/enrichment/qsa': {
+      id: '/api/v1/enrichment/qsa'
+      path: '/api/v1/enrichment/qsa'
+      fullPath: '/api/v1/enrichment/qsa'
+      preLoaderRoute: typeof ApiV1EnrichmentQsaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/enrichment/stats': {
+      id: '/api/v1/enrichment/stats'
+      path: '/api/v1/enrichment/stats'
+      fullPath: '/api/v1/enrichment/stats'
+      preLoaderRoute: typeof ApiV1EnrichmentStatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/leads/': {
+      id: '/api/v1/leads/'
+      path: '/api/v1/leads'
+      fullPath: '/api/v1/leads/'
+      preLoaderRoute: typeof ApiV1LeadsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/leads/$id': {
+      id: '/api/v1/leads/$id'
+      path: '/api/v1/leads/$id'
+      fullPath: '/api/v1/leads/$id'
+      preLoaderRoute: typeof ApiV1LeadsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/metrics/': {
+      id: '/api/v1/metrics/'
+      path: '/api/v1/metrics'
+      fullPath: '/api/v1/metrics/'
+      preLoaderRoute: typeof ApiV1MetricsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/metrics/today': {
+      id: '/api/v1/metrics/today'
+      path: '/api/v1/metrics/today'
+      fullPath: '/api/v1/metrics/today'
+      preLoaderRoute: typeof ApiV1MetricsTodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/qsa/$cnpj': {
+      id: '/api/v1/qsa/$cnpj'
+      path: '/api/v1/qsa/$cnpj'
+      fullPath: '/api/v1/qsa/$cnpj'
+      preLoaderRoute: typeof ApiV1QsaCnpjRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/qsa/resolver': {
+      id: '/api/v1/qsa/resolver'
+      path: '/api/v1/qsa/resolver'
+      fullPath: '/api/v1/qsa/resolver'
+      preLoaderRoute: typeof ApiV1QsaResolverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/queue/': {
+      id: '/api/v1/queue/'
+      path: '/api/v1/queue'
+      fullPath: '/api/v1/queue/'
+      preLoaderRoute: typeof ApiV1QueueIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/queue/cities': {
+      id: '/api/v1/queue/cities'
+      path: '/api/v1/queue/cities'
+      fullPath: '/api/v1/queue/cities'
+      preLoaderRoute: typeof ApiV1QueueCitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/enrichment/jobs/': {
+      id: '/api/v1/enrichment/jobs/'
+      path: '/api/v1/enrichment/jobs'
+      fullPath: '/api/v1/enrichment/jobs/'
+      preLoaderRoute: typeof ApiV1EnrichmentJobsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/enrichment/jobs/$id': {
+      id: '/api/v1/enrichment/jobs/$id'
+      path: '/api/v1/enrichment/jobs/$id'
+      fullPath: '/api/v1/enrichment/jobs/$id'
+      preLoaderRoute: typeof ApiV1EnrichmentJobsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/leads/$id/calls': {
+      id: '/api/v1/leads/$id/calls'
+      path: '/calls'
+      fullPath: '/api/v1/leads/$id/calls'
+      preLoaderRoute: typeof ApiV1LeadsIdCallsRouteImport
+      parentRoute: typeof ApiV1LeadsIdRoute
+    }
+    '/api/v1/leads/$id/qsa': {
+      id: '/api/v1/leads/$id/qsa'
+      path: '/qsa'
+      fullPath: '/api/v1/leads/$id/qsa'
+      preLoaderRoute: typeof ApiV1LeadsIdQsaRouteImport
+      parentRoute: typeof ApiV1LeadsIdRoute
+    }
+    '/api/v1/metrics/suggestion/': {
+      id: '/api/v1/metrics/suggestion/'
+      path: '/api/v1/metrics/suggestion'
+      fullPath: '/api/v1/metrics/suggestion/'
+      preLoaderRoute: typeof ApiV1MetricsSuggestionIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/metrics/suggestion/apply': {
+      id: '/api/v1/metrics/suggestion/apply'
+      path: '/api/v1/metrics/suggestion/apply'
+      fullPath: '/api/v1/metrics/suggestion/apply'
+      preLoaderRoute: typeof ApiV1MetricsSuggestionApplyRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -311,10 +792,46 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface ApiV1LeadsIdRouteChildren {
+  ApiV1LeadsIdCallsRoute: typeof ApiV1LeadsIdCallsRoute
+  ApiV1LeadsIdQsaRoute: typeof ApiV1LeadsIdQsaRoute
+}
+
+const ApiV1LeadsIdRouteChildren: ApiV1LeadsIdRouteChildren = {
+  ApiV1LeadsIdCallsRoute: ApiV1LeadsIdCallsRoute,
+  ApiV1LeadsIdQsaRoute: ApiV1LeadsIdQsaRoute,
+}
+
+const ApiV1LeadsIdRouteWithChildren = ApiV1LeadsIdRoute._addFileChildren(
+  ApiV1LeadsIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiHealthRoute: ApiHealthRoute,
+  ApiCronEnrichRoute: ApiCronEnrichRoute,
+  ApiV1DocsRoute: ApiV1DocsRoute,
+  ApiV1GoalsRoute: ApiV1GoalsRoute,
+  ApiV1MeRoute: ApiV1MeRoute,
+  ApiV1OpenapiRoute: ApiV1OpenapiRoute,
+  ApiV1ApiKeysIdRoute: ApiV1ApiKeysIdRoute,
+  ApiV1EnrichmentQsaRoute: ApiV1EnrichmentQsaRoute,
+  ApiV1EnrichmentStatsRoute: ApiV1EnrichmentStatsRoute,
+  ApiV1LeadsIdRoute: ApiV1LeadsIdRouteWithChildren,
+  ApiV1MetricsTodayRoute: ApiV1MetricsTodayRoute,
+  ApiV1QsaCnpjRoute: ApiV1QsaCnpjRoute,
+  ApiV1QsaResolverRoute: ApiV1QsaResolverRoute,
+  ApiV1QueueCitiesRoute: ApiV1QueueCitiesRoute,
+  ApiV1ApiKeysIndexRoute: ApiV1ApiKeysIndexRoute,
+  ApiV1LeadsIndexRoute: ApiV1LeadsIndexRoute,
+  ApiV1MetricsIndexRoute: ApiV1MetricsIndexRoute,
+  ApiV1QueueIndexRoute: ApiV1QueueIndexRoute,
+  ApiV1EnrichmentJobsIdRoute: ApiV1EnrichmentJobsIdRoute,
+  ApiV1MetricsSuggestionApplyRoute: ApiV1MetricsSuggestionApplyRoute,
+  ApiV1EnrichmentJobsIndexRoute: ApiV1EnrichmentJobsIndexRoute,
+  ApiV1MetricsSuggestionIndexRoute: ApiV1MetricsSuggestionIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -205,9 +205,17 @@ export function matchAutoescola(
   nome: string | null | undefined,
   cidade: string | null | undefined,
   candidatos: RfbEstab[],
+  opcoes: { bairro?: string | null } = {},
 ): RfbMatch | null {
   if (!candidatos.length) return null;
-  const lc = coreTokens(nome, cidade);
+  // O Maps escreve "Auto Escola Nacional - Canaã": o bairro faz parte do nome de
+  // fachada mas não da razão social, e casava com outra empresa que tem "Canaã"
+  // no nome. As palavras do bairro do próprio lead saem da comparação, a menos
+  // que sejam tudo o que sobra.
+  const lcBruto = coreTokens(nome, cidade);
+  const doBairro = new Set(norm(opcoes.bairro).split(" ").filter(Boolean));
+  const lcSemBairro = lcBruto.filter((t) => !doBairro.has(t));
+  const lc = lcSemBairro.length ? lcSemBairro : lcBruto;
   // Nome que é só nicho + cidade ("Autoescola Curvelo") não tem o que comparar.
   if (!lc.length) return null;
   const lcs = lc.join(" ");
