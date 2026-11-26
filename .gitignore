@@ -33,3 +33,6 @@ dist-ssr
 
 # Base da Receita Federal extraida localmente (21 MB) - nao vai para o repo
 _dados-rfb/
+
+# Vercel
+.vercel

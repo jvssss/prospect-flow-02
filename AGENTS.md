@@ -1,10 +1,6 @@
-<!-- LOVABLE:BEGIN -->
-> [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
->
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
-<!-- LOVABLE:END -->
+# Agentes
+
+- Deploy: Vercel, a partir do branch `main` do GitHub. O build usa Nitro com o preset `vercel` (`vite.config.ts`).
+- Banco: Supabase, projeto `vmnaatcwginshkpedwoc` (compartilhado com o app emporio-painel; as tabelas deste app ficam no schema `public`).
+- Toda mudança de schema vai em `supabase/migrations/`. Não crie tabela ou coluna direto no banco.
+- O projeto não usa mais o Lovable.

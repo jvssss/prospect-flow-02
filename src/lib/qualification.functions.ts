@@ -17,8 +17,8 @@ export const QualificationSchema = z.object({
 export type Qualification = z.infer<typeof QualificationSchema>;
 
 async function generateCloserSummary(q: Qualification) {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY não configurada");
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
 
   const system = `Você é um consultor de vendas B2B especialista em autoescolas.
 A partir das respostas de qualificação do SDR, devolva JSON estritamente com o formato:
@@ -40,23 +40,32 @@ Devolva 3 a 4 dores. Não invente números. Use PT-BR.`;
 - Investe em marketing digital: ${q.investe_marketing}
 - Maior desafio: ${q.maior_desafio}`;
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "content-type": "application/json", "Lovable-API-Key": apiKey },
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      response_format: { type: "json_object" },
+      model: process.env.ANTHROPIC_MODEL || "claude-haiku-5-5",
+      max_tokens: 1500,
+      system: system + "\nResponda somente com o objeto JSON, sem texto antes ou depois e sem bloco de código.",
+      messages: [{ role: "user", content: user }],
     }),
   });
   if (res.status === 429) throw new Error("Muitas requisições à IA, tente novamente em instantes.");
-  if (res.status === 402) throw new Error("Créditos da IA esgotados. Adicione créditos para continuar.");
+  if (res.status === 401) throw new Error("ANTHROPIC_API_KEY inválida.");
   if (!res.ok) throw new Error(`Falha IA: ${res.status} ${await res.text()}`);
   const j = await res.json();
-  const raw = j?.choices?.[0]?.message?.content ?? "{}";
+  const text: string = (j?.content ?? [])
+    .filter((b: { type?: string }) => b?.type === "text")
+    .map((b: { text?: string }) => b.text ?? "")
+    .join("");
+  // Corta qualquer texto em volta do objeto JSON.
+  const ini = text.indexOf("{");
+  const fim = text.lastIndexOf("}");
+  const raw = ini >= 0 && fim > ini ? text.slice(ini, fim + 1) : "{}";
   try { return JSON.parse(raw); } catch { return { resumo: raw, dores: [], gancho_abertura: "", proximo_passo: "" }; }
 }
 
